@@ -1,0 +1,16 @@
+[project]
+name = "comfyangel"
+description = "Parameter Overlay & Visual Widget nodes for ComfyUI"
+version = "0.1.0"
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["Pillow>=9.0.0"]
+
+[project.urls]
+Repository = "https://github.com/sira-serverless-ir-arch/ComfyAngel"
+
+[tool.comfy]
+PublisherId = "sira"
+DisplayName = "ComfyAngel"
+Icon = ""

@@ -148,10 +148,10 @@ metadata["prompt"] = '{"3": {"class_type": "KSampler", "inputs": {...}}}'
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| 1 | Project Setup (V1+V3, pyproject.toml) | ⬜ |
-| 2 | **Parameter Overlay** (metadata parser, text render) | ⬜ |
-| 3 | Visual Widgets - Crop & Color | ⬜ |
-| 4 | Visual Widgets - Position | ⬜ |
+| 1 | Project Setup (V1+V3, pyproject.toml) | ✅ |
+| 2 | **Parameter Overlay** (metadata parser, text render) | ✅ |
+| 3 | Visual Widgets - Crop & Color | ✅ |
+| 4 | Visual Widgets - Position | ✅ |
 | 5 | Polish & Registry Publish | ⬜ |
 
 **Total: ~8 nodes** (focused, high quality)
@@ -211,6 +211,33 @@ metadata["prompt"] = '{"3": {"class_type": "KSampler", "inputs": {...}}}'
 ---
 
 ## Development Workflow
+
+### Subagent Strategy
+
+**ใช้ subagent (Task tool) ให้เป็นประโยชน์:**
+- งานที่ **independent** กัน → รัน parallel ใน background ได้
+- งานที่ **dependent** กัน → ต้องรัน sequential
+
+**ตัวอย่างที่ควรรัน parallel:**
+```
+- Research ComfyUI V3 API + Research font rendering → independent, รัน parallel
+- สร้าง metadata_parser.py + สร้าง text_renderer.py → independent, รัน parallel
+- Explore codebase หลายๆ ส่วนพร้อมกัน → independent, รัน parallel
+```
+
+**ตัวอย่างที่ต้องรัน sequential:**
+```
+- สร้าง utils/ ก่อน → แล้วค่อยสร้าง nodes/ ที่ใช้ utils
+- Research ก่อน → แล้วค่อย implement
+```
+
+**Subagent Types:**
+| Type | ใช้เมื่อ |
+|------|---------|
+| `Explore` | ค้นหา/สำรวจ codebase |
+| `Plan` | วางแผน implementation |
+| `Bash` | รัน commands |
+| `general-purpose` | งานซับซ้อนหลายขั้นตอน |
 
 ### Testing Nodes
 
