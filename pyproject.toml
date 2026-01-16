@@ -1,16 +1,17 @@
 [project]
 name = "comfyangel"
-description = "Parameter Overlay & Visual Widget nodes for ComfyUI"
-version = "0.1.0"
+description = "Parameter Overlay & Visual Widget nodes for ComfyUI - Display generation parameters on images"
+version = "0.2.0"
 license = "MIT"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["Pillow>=9.0.0"]
+keywords = ["comfyui", "custom-nodes", "overlay", "metadata", "parameters"]
 
 [project.urls]
-Repository = "https://github.com/sira-serverless-ir-arch/ComfyAngel"
+Repository = "https://github.com/ThepExcel/ComfyAngel"
 
 [tool.comfy]
-PublisherId = "sira"
+PublisherId = "thepexcel"
 DisplayName = "ComfyAngel"
 Icon = ""
