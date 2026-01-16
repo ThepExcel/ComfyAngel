@@ -25,7 +25,8 @@ from .nodes.overlay_nodes import (
 from .nodes.widget_nodes import (
     SmartCrop,
     SolidColor,
-    SmartComposite,
+    SmartCompositeXY,
+    SmartCompositeAlign,
     ColorPicker,
     ImageInfo,
     ResolutionPicker,
