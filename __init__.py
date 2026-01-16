@@ -23,7 +23,8 @@ from .nodes.overlay_nodes import (
 from .nodes.widget_nodes import (
     SmartCrop,
     SolidColor,
-    SmartPosition,
+    SmartComposite,
+    ColorPicker,
     ImageInfo,
     ResolutionPicker,
     NODE_CLASS_MAPPINGS as WIDGET_MAPPINGS,

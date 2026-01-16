@@ -205,6 +205,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ComfyAngel_ParameterOverlay": "Parameter Overlay",
-    "ComfyAngel_CustomTextOverlay": "Custom Text Overlay",
+    "ComfyAngel_ParameterOverlay": "Parameter Overlay 🪽",
+    "ComfyAngel_CustomTextOverlay": "Custom Text Overlay 🪽",
 }

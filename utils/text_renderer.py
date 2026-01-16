@@ -24,31 +24,50 @@ def get_system_font(size: int = 16, bold: bool = False) -> ImageFont.FreeTypeFon
     Returns:
         PIL Font object
     """
-    # Common monospace fonts by platform
+    # Fonts with good Unicode/Thai support (prioritized first)
+    # Then fallback to monospace fonts
     font_candidates = []
 
     if sys.platform == "win32":
         font_candidates = [
+            # Thai/Unicode support (prioritized)
+            "C:/Windows/Fonts/leelawui.ttf",  # Leelawadee UI (Thai)
+            "C:/Windows/Fonts/leelauib.ttf",  # Leelawadee UI Bold
+            "C:/Windows/Fonts/tahoma.ttf",  # Tahoma (Thai)
+            "C:/Windows/Fonts/tahomabd.ttf",  # Tahoma Bold
+            "C:/Windows/Fonts/segoeui.ttf",  # Segoe UI
+            "C:/Windows/Fonts/segoeuib.ttf",  # Segoe UI Bold
+            "C:/Windows/Fonts/arial.ttf",  # Arial
+            # Monospace fallbacks
             "C:/Windows/Fonts/consola.ttf",  # Consolas
             "C:/Windows/Fonts/consolab.ttf",  # Consolas Bold
             "C:/Windows/Fonts/cour.ttf",  # Courier New
-            "C:/Windows/Fonts/courbd.ttf",  # Courier New Bold
-            "C:/Windows/Fonts/segoeui.ttf",  # Segoe UI
         ]
     elif sys.platform == "darwin":  # macOS
         font_candidates = [
+            # Thai/Unicode support
+            "/System/Library/Fonts/Thonburi.ttc",  # Thai
+            "/System/Library/Fonts/Supplemental/Tahoma.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/SFNS.ttf",  # San Francisco
+            # Monospace fallbacks
             "/System/Library/Fonts/Monaco.ttf",
             "/System/Library/Fonts/Menlo.ttc",
-            "/Library/Fonts/Courier New.ttf",
-            "/System/Library/Fonts/SFNSMono.ttf",
         ]
     else:  # Linux
         font_candidates = [
+            # Thai/Unicode support
+            "/usr/share/fonts/truetype/thai/Garuda.ttf",
+            "/usr/share/fonts/truetype/thai/TlwgTypo.ttf",
+            "/usr/share/fonts/truetype/tlwg/Garuda.ttf",
+            "/usr/share/fonts/truetype/tlwg/TlwgTypo.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansThai-Regular.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+            # Monospace fallbacks
             "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
             "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
-            "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
         ]
 
     # Try bold variants first if requested
