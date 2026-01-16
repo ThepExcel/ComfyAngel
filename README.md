@@ -233,19 +233,24 @@ Pick a color and output as hex string.
 
 #### Smart Crop 🪽
 
-Crop image using coordinates.
+Crop image with visual crop area selector.
 
 | Input | Type | Description |
 |-------|------|-------------|
 | image | IMAGE | Image to crop |
 | x | INT | Left position (0 to 8192) |
 | y | INT | Top position (0 to 8192) |
-| crop_width | INT | Width of crop area |
-| crop_height | INT | Height of crop area |
+| crop_width | INT | Width of crop area (default: 512) |
+| crop_height | INT | Height of crop area (default: 512) |
 
 | Output | Type | Description |
 |--------|------|-------------|
 | image | IMAGE | Cropped image |
+
+**Features:**
+- **Visual Crop Editor** - Click "Open Crop Editor" to visually select crop area
+- Drag to adjust crop region on the image
+- Auto-clamps to image bounds
 
 ---
 
