@@ -2,7 +2,7 @@
 name = "comfyangel"
 description = "Parameter Overlay & Visual Widget nodes for ComfyUI - Display generation parameters on images"
 version = "0.2.0"
-license = "MIT"
+license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["Pillow>=9.0.0"]
