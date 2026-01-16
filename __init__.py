@@ -13,6 +13,8 @@ except ImportError:
 
 # Import overlay nodes
 from .nodes.overlay_nodes import (
+    LoadImageWithMetadata,
+    ParameterParser,
     ParameterOverlay,
     CustomTextOverlay,
     NODE_CLASS_MAPPINGS as OVERLAY_MAPPINGS,
@@ -27,6 +29,7 @@ from .nodes.widget_nodes import (
     ColorPicker,
     ImageInfo,
     ResolutionPicker,
+    ImageBridge,
     NODE_CLASS_MAPPINGS as WIDGET_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as WIDGET_DISPLAY_MAPPINGS,
 )

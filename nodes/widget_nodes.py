@@ -429,6 +429,87 @@ class ColorPicker:
         return (color_hex.upper(),)
 
 
+class ImageBridge:
+    """
+    Pass-through node with preview or save option.
+
+    Use this between nodes to:
+    - Preview: Show image and make it available for visual editors
+    - Save: Save image to output folder
+
+    Image passes through unchanged to the output.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "mode": (["preview", "save"], {"default": "preview"}),
+            },
+            "optional": {
+                "filename_prefix": ("STRING", {"default": "ComfyAngel"}),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "bridge"
+    CATEGORY = "ComfyAngel/Utility"
+    OUTPUT_NODE = True
+
+    def bridge(self, image, mode: str = "preview", filename_prefix: str = "ComfyAngel"):
+        import os
+        import time
+        import random
+        import folder_paths
+
+        image = ensure_bhwc(image)
+
+        # Generate unique ID for this execution
+        unique_id = f"{int(time.time()*1000)}_{random.randint(1000,9999)}"
+
+        results = []
+        for i in range(image.shape[0]):
+            pil_img = to_pil(image, i)
+
+            if mode == "save":
+                # Save to output folder
+                output_dir = folder_paths.get_output_directory()
+                subfolder = ""
+
+                # Generate unique filename
+                counter = 1
+                while True:
+                    filename = f"{filename_prefix}_{counter:05d}.png"
+                    filepath = os.path.join(output_dir, filename)
+                    if not os.path.exists(filepath):
+                        break
+                    counter += 1
+
+                pil_img.save(filepath, compress_level=4)
+
+                results.append({
+                    "filename": filename,
+                    "subfolder": subfolder,
+                    "type": "output",
+                })
+            else:
+                # Preview - save to temp folder with unique name
+                temp_dir = folder_paths.get_temp_directory()
+                filename = f"imgbridge_{unique_id}_{i:03d}.png"
+                filepath = os.path.join(temp_dir, filename)
+                pil_img.save(filepath)
+
+                results.append({
+                    "filename": filename,
+                    "subfolder": "",
+                    "type": "temp",
+                })
+
+        return {"ui": {"images": results}, "result": (image,)}
+
+
 class ResolutionPicker:
     """
     Pick from common image resolutions by aspect ratio.
@@ -668,6 +749,7 @@ NODE_CLASS_MAPPINGS = {
     "ComfyAngel_ColorPicker": ColorPicker,
     "ComfyAngel_ImageInfo": ImageInfo,
     "ComfyAngel_ResolutionPicker": ResolutionPicker,
+    "ComfyAngel_ImageBridge": ImageBridge,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -677,4 +759,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyAngel_ColorPicker": "Color Picker 🪽",
     "ComfyAngel_ImageInfo": "Image Info 🪽",
     "ComfyAngel_ResolutionPicker": "Resolution Picker 🪽",
+    "ComfyAngel_ImageBridge": "Image Bridge 🪽",
 }

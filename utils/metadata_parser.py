@@ -38,16 +38,16 @@ class GenerationParams:
         """
         lines = []
 
-        # Line 1: Model + LoRAs
-        model_parts = []
+        # Line 1: Model (separate line)
         if self.model:
-            model_parts.append(self.model)
-        for lora_name, lora_weight in self.loras[:2]:  # Max 2 LoRAs
-            model_parts.append(f"{lora_name}:{lora_weight:.1f}")
-        if model_parts:
-            lines.append(" | ".join(model_parts))
+            lines.append(f"Model: {self.model}")
 
-        # Line 2: Seed, CFG, Steps, Sampler
+        # Line 2: LoRAs (separate line if any)
+        if self.loras:
+            lora_parts = [f"{name}:{weight:.1f}" for name, weight in self.loras[:3]]  # Max 3 LoRAs
+            lines.append(f"LoRA: {', '.join(lora_parts)}")
+
+        # Line 3: Seed, CFG, Steps, Sampler
         param_parts = []
         if self.seed is not None:
             param_parts.append(f"Seed:{self.seed}")
@@ -63,7 +63,7 @@ class GenerationParams:
         if param_parts:
             lines.append(" | ".join(param_parts))
 
-        # Line 3: Resolution + Denoise (optional)
+        # Line 4: Resolution + Denoise (optional)
         extra_parts = []
         if self.width and self.height:
             extra_parts.append(f"{self.width}x{self.height}")
@@ -182,15 +182,30 @@ def parse_comfyui_format(prompt_json: str, workflow_json: Optional[str] = None) 
             if "denoise" in inputs:
                 params.denoise = float(inputs["denoise"])
 
-        # CheckpointLoader
-        if "CheckpointLoader" in class_type or "CheckpointSimple" in class_type:
-            if "ckpt_name" in inputs:
-                # Remove extension and path
-                model_name = inputs["ckpt_name"]
-                model_name = model_name.rsplit("/", 1)[-1]
-                model_name = model_name.rsplit("\\", 1)[-1]
-                model_name = re.sub(r"\.(safetensors|ckpt)$", "", model_name)
-                params.model = model_name
+        # Model loaders - many different types
+        model_loader_types = [
+            "CheckpointLoader", "CheckpointSimple",
+            "DiffusionLoader", "UNETLoader", "GGUFLoader",
+            "ModelLoader", "LoadDiffusionModel", "Load Diffusion Model",
+            "Unet Loader", "GGUF", "Checkpoint"
+        ]
+        is_model_loader = any(t.lower() in class_type.lower() for t in model_loader_types)
+
+        if is_model_loader:
+            # Try different field names for model
+            model_fields = ["ckpt_name", "unet_name", "model_name", "diffusion_model", "gguf_name", "name"]
+            for field in model_fields:
+                if field in inputs and inputs[field]:
+                    model_name = str(inputs[field])
+                    # Remove path
+                    model_name = model_name.rsplit("/", 1)[-1]
+                    model_name = model_name.rsplit("\\", 1)[-1]
+                    # Remove extension
+                    model_name = re.sub(r"\.(safetensors|ckpt|gguf|bin|pt|pth)$", "", model_name, flags=re.IGNORECASE)
+                    if model_name and not params.model:
+                        params.model = model_name
+                        print(f"[ComfyAngel] Parser found model: {model_name} from {class_type}.{field}")
+                    break
 
         # LoraLoader
         if "LoraLoader" in class_type or "Lora" in class_type:
@@ -210,18 +225,46 @@ def parse_comfyui_format(prompt_json: str, workflow_json: Optional[str] = None) 
             if "height" in inputs:
                 params.height = int(inputs["height"])
 
-        # CLIPTextEncode (prompts)
-        if "CLIPTextEncode" in class_type:
-            text = inputs.get("text", "")
-            if text:
-                # Heuristic: shorter text or text with "bad" is likely negative
-                if params.positive_prompt is None:
-                    params.positive_prompt = text
-                elif "bad" in text.lower() or "ugly" in text.lower() or len(text) < len(params.positive_prompt):
-                    params.negative_prompt = text
-                    # Swap if needed
-                    if len(params.positive_prompt) < len(text):
-                        params.positive_prompt, params.negative_prompt = params.negative_prompt, params.positive_prompt
+        # Smart prompt detection - search all string fields
+        for field_name, field_value in inputs.items():
+            if not isinstance(field_value, str):
+                continue
+            if len(field_value) < 5:  # Too short to be a prompt
+                continue
+
+            # Skip if it looks like a file path or technical value
+            if "/" in field_value or "\\" in field_value:
+                continue
+            if field_value.endswith((".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".png", ".jpg")):
+                continue
+            if field_value in ("enable", "disable", "true", "false", "none", "default"):
+                continue
+
+            # Check if it looks like a prompt (has descriptive words)
+            # Prompts usually have spaces, commas, or descriptive text
+            looks_like_prompt = (
+                " " in field_value or
+                "," in field_value or
+                len(field_value) > 20
+            )
+
+            if looks_like_prompt:
+                print(f"[ComfyAngel] Parser found potential prompt: field={field_name}, text={field_value[:50]}...")
+
+                # Determine if positive or negative
+                is_negative = (
+                    "negative" in field_name.lower() or
+                    "bad" in field_value.lower()[:100] or
+                    "ugly" in field_value.lower()[:100] or
+                    "worst" in field_value.lower()[:100]
+                )
+
+                if is_negative:
+                    if params.negative_prompt is None or len(field_value) > len(params.negative_prompt):
+                        params.negative_prompt = field_value
+                else:
+                    if params.positive_prompt is None or len(field_value) > len(params.positive_prompt):
+                        params.positive_prompt = field_value
 
     return params
 
