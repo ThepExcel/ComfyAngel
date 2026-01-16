@@ -218,13 +218,16 @@ Pick a color and output as hex string.
 | Input | Type | Description |
 |-------|------|-------------|
 | color_hex | STRING | Color in hex format |
-| image | IMAGE | Optional image for eyedropper (future feature) |
+| image | IMAGE | Optional image for eyedropper picking |
 
 | Output | Type | Description |
 |--------|------|-------------|
 | color | STRING | Normalized hex color (e.g., #FF0000) |
 
-**Tip:** Connect output to Solid Color node's color input.
+**Features:**
+- HEX, RGB, HSL input modes
+- Color presets for quick selection
+- **Eyedropper** - Click on connected image to pick color directly
 
 ---
 
