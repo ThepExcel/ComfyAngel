@@ -31,8 +31,18 @@ from .nodes.widget_nodes import (
     ImageInfo,
     ResolutionPicker,
     ImageBridge,
+    WorkflowMetadata,
     NODE_CLASS_MAPPINGS as WIDGET_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as WIDGET_DISPLAY_MAPPINGS,
+)
+
+# Import loader nodes
+from .nodes.loader_nodes import (
+    LoadImageFromFolder,
+    LoadAllImagesFromFolder,
+    SplitImageBatch,
+    NODE_CLASS_MAPPINGS as LOADER_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as LOADER_DISPLAY_MAPPINGS,
 )
 
 
@@ -60,6 +70,10 @@ NODE_DISPLAY_NAME_MAPPINGS.update(OVERLAY_DISPLAY_MAPPINGS)
 # Register widget nodes
 NODE_CLASS_MAPPINGS.update(WIDGET_MAPPINGS)
 NODE_DISPLAY_NAME_MAPPINGS.update(WIDGET_DISPLAY_MAPPINGS)
+
+# Register loader nodes
+NODE_CLASS_MAPPINGS.update(LOADER_MAPPINGS)
+NODE_DISPLAY_NAME_MAPPINGS.update(LOADER_DISPLAY_MAPPINGS)
 
 # JS widgets directory
 WEB_DIRECTORY = "./js"

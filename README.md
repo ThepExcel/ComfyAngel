@@ -41,6 +41,76 @@ Then restart ComfyUI.
 
 ## Nodes
 
+### Loader Nodes
+
+#### Load Image from Folder 🪽
+
+Load images from a folder one at a time for loop processing.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| folder_path | STRING | Path to folder containing images |
+| index | INT | Image index (has control_after_generate for auto-increment) |
+| sort_by | ENUM | `name`, `modified_date`, `created_date` |
+| loop | BOOLEAN | Loop back to first image when reaching end (default: true) |
+| include_subdirs | BOOLEAN | Include images in subfolders (default: false) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| image | IMAGE | Current image |
+| mask | MASK | Alpha channel as mask |
+| filename | STRING | Filename without extension |
+| filename_ext | STRING | Filename with extension |
+| metadata_raw | STRING | Raw metadata from PNG file |
+| index | INT | Current index |
+| total_count | INT | Total images in folder |
+
+**Use with Auto Queue:** Set index to "increment" mode, enable Auto Queue, and process entire folders automatically.
+
+---
+
+#### Load Images from Folder as BATCH 🪽
+
+Load ALL images from a folder as a batch tensor.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| folder_path | STRING | Path to folder containing images |
+| sort_by | ENUM | `name`, `modified_date`, `created_date` |
+| max_images | INT | Maximum images to load (0 = unlimited) |
+| start_index | INT | Skip first N images |
+| include_subdirs | BOOLEAN | Include images in subfolders (default: false) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| images | IMAGE | Batch tensor (all images stacked) |
+| filenames | STRING | Newline-separated list of filenames |
+| count | INT | Number of images loaded |
+
+**Note:** All images are resized to match the first image's dimensions.
+
+---
+
+#### Split Image Batch 🪽
+
+Split a batch of images and output one at a time.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| images | IMAGE | Batch of images |
+| index | INT | Image index (has control_after_generate for auto-increment) |
+| loop | BOOLEAN | Loop back when reaching end (default: true) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| image | IMAGE | Single image at index |
+| index | INT | Current index |
+| total_count | INT | Total images in batch |
+
+**Use case:** Combine with "Load Images from Folder as BATCH" to process batch images one at a time.
+
+---
+
 ### Overlay Nodes
 
 #### Load Image + Metadata 🪽
@@ -95,13 +165,18 @@ Add generation parameters as visual overlay on image.
 | image_path | STRING | Path to image with metadata (optional) |
 | metadata_text | STRING | Raw metadata text (optional) |
 | position | ENUM | `bottom_extend`, `bottom_inside`, `top_inside` |
-| font_size | INT | Font size 8-32 (default: 14) |
+| font_size | INT | Font size 8-100 (default: 25) |
 | bg_opacity | FLOAT | Background opacity 0.0-1.0 (default: 0.7) |
 | show_prompt | BOOLEAN | Show prompt in overlay (default: false) |
+| max_prompt_length | INT | Max prompt chars, 0 = unlimited (default: 200) |
 
 | Output | Type | Description |
 |--------|------|-------------|
 | image | IMAGE | Image with parameter overlay |
+
+**Features:**
+- Auto word-wrap for long text
+- Supports Thai and Unicode fonts
 
 ---
 
@@ -114,7 +189,7 @@ Add custom text overlay with full styling control.
 | image | IMAGE | Image to add overlay to |
 | text | STRING | Text to display (multiline supported) |
 | position | ENUM | `bottom_extend`, `bottom_inside`, `top_inside` |
-| font_size | INT | Font size 8-48 (default: 14) |
+| font_size | INT | Font size 8-100 (default: 25) |
 | bg_opacity | FLOAT | Background opacity 0.0-1.0 (default: 0.7) |
 | text_color | STRING | Text color in hex (default: #FFFFFF) |
 | bg_color | STRING | Background color in hex (default: #000000) |
@@ -123,134 +198,46 @@ Add custom text overlay with full styling control.
 |--------|------|-------------|
 | image | IMAGE | Image with text overlay |
 
----
-
-### Composite Nodes
-
-#### Smart Composite XY 🪽
-
-Composite overlay image onto canvas using X,Y coordinates.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| canvas | IMAGE | Background image |
-| overlay | IMAGE | Image to place on top |
-| x | INT | X position (-8192 to 8192) |
-| y | INT | Y position (-8192 to 8192) |
-| anchor | ENUM | Anchor point of overlay: `top_left`, `top_center`, `top_right`, `middle_left`, `center`, `middle_right`, `bottom_left`, `bottom_center`, `bottom_right` |
-| scale | FLOAT | Scale percentage 1-500% (default: 100) |
-| blend_mode | ENUM | `normal`, `multiply`, `screen`, `overlay`, `soft_light`, `hard_light`, `difference`, `add`, `subtract`, `darken`, `lighten` |
-| opacity | FLOAT | Opacity 0-100% (default: 100) |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| image | IMAGE | Composited image |
-
-**Use case:** When you need precise pixel-level positioning.
-
----
-
-#### Smart Composite Align 🪽
-
-Composite overlay image onto canvas using alignment presets.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| canvas | IMAGE | Background image |
-| overlay | IMAGE | Image to place on top |
-| alignment | ENUM | Position on canvas: `top_left`, `top_center`, `top_right`, `middle_left`, `center`, `middle_right`, `bottom_left`, `bottom_center`, `bottom_right` |
-| margin_x | INT | Horizontal margin from edge (-8192 to 8192) |
-| margin_y | INT | Vertical margin from edge (-8192 to 8192) |
-| scale | FLOAT | Scale percentage 1-500% (default: 100) |
-| blend_mode | ENUM | Same as Smart Composite XY |
-| opacity | FLOAT | Opacity 0-100% (default: 100) |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| image | IMAGE | Composited image |
-
-**Use case:** When you want to place images at corners, edges, or center without calculating coordinates.
-
----
-
-### Widget Nodes
-
-#### Resolution Picker 🪽
-
-Pick from common image resolutions organized by aspect ratio.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| aspect_ratio | ENUM | `1:1 (Square)`, `4:3 (Standard)`, `3:2 (Photo)`, `16:9 (Widescreen)`, `21:9 (Ultrawide)`, `9:16 (Portrait Mobile)`, `3:4 (Portrait Standard)`, `2:3 (Portrait Photo)` |
-| resolution | ENUM | Resolution options for selected aspect ratio |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| width | INT | Width in pixels |
-| height | INT | Height in pixels |
-| aspect_ratio | STRING | Aspect ratio string |
-
-**Included presets:** SD 1.5, SDXL, SD3, Flux, DALL-E 3, Qwen-Image, Midjourney, Hunyuan, Kolors, and standard resolutions (720p, 1080p, 4K, etc.)
-
----
-
-#### Solid Color 🪽
-
-Generate a solid color image.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| color | STRING | Color in hex format (default: #FFFFFF) |
-| width | INT | Image width (default: 512) |
-| height | INT | Image height (default: 512) |
-| batch_size | INT | Number of images to generate (default: 1) |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| image | IMAGE | Solid color image |
-
----
-
-#### Color Picker 🪽
-
-Pick a color and output as hex string.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| color_hex | STRING | Color in hex format |
-| image | IMAGE | Optional image for eyedropper picking |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| color | STRING | Normalized hex color (e.g., #FF0000) |
-
 **Features:**
-- HEX, RGB, HSL input modes
-- Color presets for quick selection
-- **Eyedropper** - Click on connected image to pick color directly
+- Auto word-wrap for long text
+- Supports Thai and Unicode fonts
 
 ---
 
-#### Smart Crop 🪽
+### Utility Nodes
 
-Crop image with visual crop area selector.
+#### Image Bridge 🪽
+
+Pass-through node with preview or save functionality.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| image | IMAGE | Image to crop |
-| x | INT | Left position (0 to 8192) |
-| y | INT | Top position (0 to 8192) |
-| crop_width | INT | Width of crop area (default: 512) |
-| crop_height | INT | Height of crop area (default: 512) |
+| image | IMAGE | Image to preview/save |
+| mode | ENUM | `preview` (show in UI) or `save` (save to output folder) |
+| filename_prefix | STRING | Prefix for saved files (default: ComfyAngel) |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| image | IMAGE | Cropped image |
+| image | IMAGE | Same image (pass-through) |
 
-**Features:**
-- **Visual Crop Editor** - Click "Open Crop Editor" to visually select crop area
-- Drag to adjust crop region on the image
-- Auto-clamps to image bounds
+**Use case:** Insert between nodes to preview intermediate results while continuing the workflow.
+
+---
+
+#### Workflow Metadata 🪽
+
+Output the current workflow/prompt as JSON string.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| (none) | - | Uses hidden prompt and workflow inputs |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| prompt_json | STRING | Current prompt/nodes as JSON |
+| workflow_json | STRING | Full workflow as JSON |
+
+**Use case:** Debug workflows, embed workflow info, or analyze execution.
 
 ---
 
@@ -271,27 +258,122 @@ Get image dimensions and batch information.
 
 ---
 
-#### Image Bridge 🪽
+### Composite Nodes
 
-Pass-through node with preview or save functionality.
+#### Smart Composite XY 🪽
+
+Composite overlay image onto canvas using X,Y coordinates.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| image | IMAGE | Image to preview/save |
-| mode | ENUM | `preview` (show in UI) or `save` (save to output folder) |
-| filename_prefix | STRING | Prefix for saved files (default: ComfyAngel) |
+| canvas | IMAGE | Background image |
+| overlay | IMAGE | Image to place on top |
+| x | INT | X position (-8192 to 8192) |
+| y | INT | Y position (-8192 to 8192) |
+| anchor | ENUM | Anchor point: `top_left`, `center`, `bottom_right`, etc. |
+| scale | FLOAT | Scale percentage 1-500% (default: 100) |
+| blend_mode | ENUM | `normal`, `multiply`, `screen`, `overlay`, etc. |
+| opacity | FLOAT | Opacity 0-100% (default: 100) |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| image | IMAGE | Same image (pass-through) |
-
-**Use case:** Insert between nodes to preview intermediate results while continuing the workflow.
+| image | IMAGE | Composited image |
 
 ---
 
-## Example Workflow
+#### Smart Composite Align 🪽
 
-See `examples/ComfyAngel Example.json` - drag and drop into ComfyUI to load.
+Composite overlay image onto canvas using alignment presets.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| canvas | IMAGE | Background image |
+| overlay | IMAGE | Image to place on top |
+| alignment | ENUM | Position: `top_left`, `center`, `bottom_right`, etc. |
+| margin_x | INT | Horizontal margin (-8192 to 8192) |
+| margin_y | INT | Vertical margin (-8192 to 8192) |
+| scale | FLOAT | Scale percentage 1-500% (default: 100) |
+| blend_mode | ENUM | Same as Smart Composite XY |
+| opacity | FLOAT | Opacity 0-100% (default: 100) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| image | IMAGE | Composited image |
+
+---
+
+### Widget Nodes
+
+#### Resolution Picker 🪽
+
+Pick from common image resolutions organized by aspect ratio.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| aspect_ratio | ENUM | `1:1`, `4:3`, `16:9`, `9:16`, etc. |
+| resolution | ENUM | Resolution options for selected ratio |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| width | INT | Width in pixels |
+| height | INT | Height in pixels |
+| aspect_ratio | STRING | Aspect ratio string |
+
+**Included presets:** SD 1.5, SDXL, SD3, Flux, DALL-E 3, Qwen-Image, Midjourney, Hunyuan, Kolors, and standard resolutions.
+
+---
+
+#### Solid Color 🪽
+
+Generate a solid color image.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| color | STRING | Color in hex format (default: #FFFFFF) |
+| width | INT | Image width (default: 512) |
+| height | INT | Image height (default: 512) |
+| batch_size | INT | Number of images (default: 1) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| image | IMAGE | Solid color image |
+
+---
+
+#### Color Picker 🪽
+
+Pick a color with visual color picker and eyedropper.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| color_hex | STRING | Color in hex format |
+| image | IMAGE | Optional image for eyedropper |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| color | STRING | Normalized hex color |
+
+**Features:** HEX/RGB/HSL input, color presets, eyedropper from connected image.
+
+---
+
+#### Smart Crop 🪽
+
+Crop image with visual crop area selector.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| image | IMAGE | Image to crop |
+| x | INT | Left position |
+| y | INT | Top position |
+| crop_width | INT | Crop width (default: 512) |
+| crop_height | INT | Crop height (default: 512) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| image | IMAGE | Cropped image |
+
+**Features:** Visual Crop Editor - click to open and drag to select area.
 
 ---
 

@@ -556,8 +556,8 @@ class ImageBridge:
             },
         }
 
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("image", "metadata_raw")
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
     FUNCTION = "bridge"
     CATEGORY = "ComfyAngel/Utility"
     OUTPUT_NODE = True
@@ -619,12 +619,7 @@ class ImageBridge:
                     "type": "temp",
                 })
 
-        # Create metadata_raw from prompt (ComfyUI format)
-        metadata_raw = ""
-        if prompt is not None:
-            metadata_raw = json.dumps(prompt)
-
-        return {"ui": {"images": results}, "result": (image, metadata_raw)}
+        return {"ui": {"images": results}, "result": (image,)}
 
 
 class ResolutionPicker:
@@ -858,6 +853,42 @@ class ResolutionPicker:
         return (1024, 1024, "1:1 (Square)")
 
 
+class WorkflowMetadata:
+    """
+    Output the current workflow/prompt as JSON string.
+
+    Use this to get the workflow metadata for the current execution.
+    Useful for embedding workflow info or debugging.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {},
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("prompt_json", "workflow_json")
+    FUNCTION = "get_metadata"
+    CATEGORY = "ComfyAngel/Utility"
+
+    def get_metadata(self, prompt=None, extra_pnginfo=None):
+        prompt_json = ""
+        workflow_json = ""
+
+        if prompt is not None:
+            prompt_json = json.dumps(prompt, indent=2)
+
+        if extra_pnginfo is not None and "workflow" in extra_pnginfo:
+            workflow_json = json.dumps(extra_pnginfo["workflow"], indent=2)
+
+        return (prompt_json, workflow_json)
+
+
 # Export for registration
 NODE_CLASS_MAPPINGS = {
     "ComfyAngel_SmartCrop": SmartCrop,
@@ -868,6 +899,7 @@ NODE_CLASS_MAPPINGS = {
     "ComfyAngel_ImageInfo": ImageInfo,
     "ComfyAngel_ResolutionPicker": ResolutionPicker,
     "ComfyAngel_ImageBridge": ImageBridge,
+    "ComfyAngel_WorkflowMetadata": WorkflowMetadata,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -879,4 +911,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyAngel_ImageInfo": "Image Info 🪽",
     "ComfyAngel_ResolutionPicker": "Resolution Picker 🪽",
     "ComfyAngel_ImageBridge": "Image Bridge 🪽",
+    "ComfyAngel_WorkflowMetadata": "Workflow Metadata 🪽",
 }

@@ -171,15 +171,15 @@ def parse_comfyui_format(prompt_json: str, workflow_json: Optional[str] = None) 
                 seed_val = inputs["seed"]
                 if isinstance(seed_val, (int, float)):
                     params.seed = int(seed_val)
-            if "cfg" in inputs:
+            if "cfg" in inputs and isinstance(inputs["cfg"], (int, float)):
                 params.cfg = float(inputs["cfg"])
-            if "steps" in inputs:
+            if "steps" in inputs and isinstance(inputs["steps"], (int, float)):
                 params.steps = int(inputs["steps"])
-            if "sampler_name" in inputs:
+            if "sampler_name" in inputs and isinstance(inputs["sampler_name"], str):
                 params.sampler = inputs["sampler_name"]
-            if "scheduler" in inputs:
+            if "scheduler" in inputs and isinstance(inputs["scheduler"], str):
                 params.scheduler = inputs["scheduler"]
-            if "denoise" in inputs:
+            if "denoise" in inputs and isinstance(inputs["denoise"], (int, float)):
                 params.denoise = float(inputs["denoise"])
 
         # Model loaders - many different types
@@ -219,11 +219,27 @@ def parse_comfyui_format(prompt_json: str, workflow_json: Optional[str] = None) 
                 params.loras.append((lora_name, float(strength)))
 
         # EmptyLatentImage (for resolution)
-        if "EmptyLatentImage" in class_type:
+        if "EmptyLatentImage" in class_type or "LatentSize" in class_type:
             if "width" in inputs:
                 params.width = int(inputs["width"])
             if "height" in inputs:
                 params.height = int(inputs["height"])
+            # Handle resolution picker format like "768x1280 (0.6)"
+            if "resolution" in inputs:
+                res_match = re.match(r"(\d+)x(\d+)", str(inputs["resolution"]))
+                if res_match:
+                    params.width = int(res_match.group(1))
+                    params.height = int(res_match.group(2))
+
+        # CLIPTextEncode - explicit prompt detection
+        if "CLIPTextEncode" in class_type:
+            text = inputs.get("text", "")
+            if text and len(text) > 10:
+                # Check if this is connected to negative (ConditioningZeroOut means it's used as negative base)
+                # For now, assume first CLIPTextEncode is positive
+                if params.positive_prompt is None or len(text) > len(params.positive_prompt):
+                    params.positive_prompt = text
+                    print(f"[ComfyAngel] Parser found prompt from CLIPTextEncode: {text[:50]}...")
 
         # Smart prompt detection - search all string fields
         for field_name, field_value in inputs.items():

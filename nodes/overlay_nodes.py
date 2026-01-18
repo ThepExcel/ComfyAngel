@@ -216,6 +216,7 @@ class ParameterOverlay:
                 "font_size": ("INT", {"default": 25, "min": 8, "max": 100, "step": 1}),
                 "bg_opacity": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.1}),
                 "show_prompt": ("BOOLEAN", {"default": False}),
+                "max_prompt_length": ("INT", {"default": 200, "min": 0, "max": 10000, "step": 10}),
             }
         }
 
@@ -230,9 +231,10 @@ class ParameterOverlay:
         image_path: str = "",
         metadata_text: str = "",
         position: str = "bottom_extend",
-        font_size: int = 14,
+        font_size: int = 25,
         bg_opacity: float = 0.7,
         show_prompt: bool = False,
+        max_prompt_length: int = 50,
     ):
         image = ensure_bhwc(image)
         batch_size = image.shape[0]
@@ -250,7 +252,9 @@ class ParameterOverlay:
             params = read_image_metadata(image_path)
 
         # Get overlay lines
-        lines = params.format_overlay(show_prompt=show_prompt)
+        # max_prompt_length: 0 = unlimited
+        prompt_len = None if max_prompt_length == 0 else max_prompt_length
+        lines = params.format_overlay(show_prompt=show_prompt, max_prompt_len=prompt_len)
 
         if not lines:
             # No metadata found, return original
