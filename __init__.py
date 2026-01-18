@@ -32,6 +32,9 @@ from .nodes.widget_nodes import (
     ResolutionPicker,
     ImageBridge,
     WorkflowMetadata,
+    TextCombine,
+    TextPermutation,
+    TextPermutationIndex,
     NODE_CLASS_MAPPINGS as WIDGET_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as WIDGET_DISPLAY_MAPPINGS,
 )

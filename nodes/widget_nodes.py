@@ -18,6 +18,7 @@ class SmartCrop:
     Crop image with visual crop area selector.
 
     Uses a JS widget for interactive crop area selection.
+    Supports cropping beyond image bounds with customizable background color.
     """
 
     @classmethod
@@ -25,10 +26,13 @@ class SmartCrop:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "x": ("INT", {"default": 0, "min": 0, "max": 8192, "step": 1}),
-                "y": ("INT", {"default": 0, "min": 0, "max": 8192, "step": 1}),
+                "x": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
+                "y": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
                 "crop_width": ("INT", {"default": 512, "min": 1, "max": 8192, "step": 1}),
                 "crop_height": ("INT", {"default": 512, "min": 1, "max": 8192, "step": 1}),
+            },
+            "optional": {
+                "bg_color": ("STRING", {"default": "#000000"}),
             },
         }
 
@@ -37,26 +41,53 @@ class SmartCrop:
     FUNCTION = "crop"
     CATEGORY = "ComfyAngel/Widget"
 
-    def crop(self, image, x: int, y: int, crop_width: int, crop_height: int):
+    def crop(self, image, x: int, y: int, crop_width: int, crop_height: int, bg_color: str = "#000000"):
         image = ensure_bhwc(image)
-        batch_size, height, width, channels = image.shape
-
-        # Clamp coordinates to valid range
-        x = max(0, min(x, width - 1))
-        y = max(0, min(y, height - 1))
-
-        # Adjust crop size if it exceeds image bounds
-        crop_width = min(crop_width, width - x)
-        crop_height = min(crop_height, height - y)
+        batch_size, img_height, img_width, channels = image.shape
 
         if crop_width <= 0 or crop_height <= 0:
-            # Return original if crop is invalid
             return (image,)
 
-        # Crop all images in batch
-        cropped = image[:, y:y+crop_height, x:x+crop_width, :]
+        # Parse background color
+        bg_rgb = self._hex_to_rgb(bg_color)
+        bg_normalized = [c / 255.0 for c in bg_rgb]
 
-        return (cropped,)
+        results = []
+        for b in range(batch_size):
+            # Create output canvas with background color
+            canvas = torch.zeros((crop_height, crop_width, channels), dtype=image.dtype, device=image.device)
+            for c in range(min(channels, 3)):
+                canvas[:, :, c] = bg_normalized[c]
+
+            # Calculate source region (from original image)
+            src_x1 = max(0, x)
+            src_y1 = max(0, y)
+            src_x2 = min(img_width, x + crop_width)
+            src_y2 = min(img_height, y + crop_height)
+
+            # Calculate destination region (on canvas)
+            dst_x1 = max(0, -x)
+            dst_y1 = max(0, -y)
+            dst_x2 = dst_x1 + (src_x2 - src_x1)
+            dst_y2 = dst_y1 + (src_y2 - src_y1)
+
+            # Copy the overlapping region
+            if src_x2 > src_x1 and src_y2 > src_y1:
+                canvas[dst_y1:dst_y2, dst_x1:dst_x2, :] = image[b, src_y1:src_y2, src_x1:src_x2, :]
+
+            results.append(canvas)
+
+        return (torch.stack(results, dim=0),)
+
+    def _hex_to_rgb(self, hex_color: str) -> tuple:
+        """Convert hex color to RGB tuple."""
+        hex_color = hex_color.lstrip("#")
+        if len(hex_color) == 3:
+            hex_color = "".join([c * 2 for c in hex_color])
+        try:
+            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        except ValueError:
+            return (0, 0, 0)
 
 
 class SolidColor:
@@ -113,10 +144,26 @@ class SolidColor:
 
 class ImageInfo:
     """
-    Display information about an image.
+    Display comprehensive information about an image.
 
-    Shows width, height, channels, and batch size.
+    Outputs technical properties like dimensions, aspect ratio,
+    pixel statistics, and format detection.
     """
+
+    # Common aspect ratios for detection
+    ASPECT_RATIOS = [
+        (1, 1, "1:1"),
+        (4, 3, "4:3"),
+        (3, 4, "3:4"),
+        (16, 9, "16:9"),
+        (9, 16, "9:16"),
+        (3, 2, "3:2"),
+        (2, 3, "2:3"),
+        (21, 9, "21:9"),
+        (9, 21, "9:21"),
+        (5, 4, "5:4"),
+        (4, 5, "4:5"),
+    ]
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -126,15 +173,106 @@ class ImageInfo:
             },
         }
 
-    RETURN_TYPES = ("INT", "INT", "INT", "INT")
-    RETURN_NAMES = ("width", "height", "channels", "batch_size")
+    RETURN_TYPES = ("INT", "INT", "INT", "INT", "FLOAT", "STRING", "STRING", "FLOAT", "BOOLEAN", "FLOAT", "FLOAT", "FLOAT", "BOOLEAN", "STRING")
+    RETURN_NAMES = ("width", "height", "channels", "batch_size", "megapixels", "aspect_ratio", "orientation", "aspect_float", "has_alpha", "min_value", "max_value", "mean_value", "is_grayscale", "summary")
     FUNCTION = "get_info"
     CATEGORY = "ComfyAngel/Utility"
 
     def get_info(self, image):
         image = ensure_bhwc(image)
         batch_size, height, width, channels = image.shape
-        return (width, height, channels, batch_size)
+
+        # Megapixels
+        megapixels = round((width * height) / 1_000_000, 2)
+
+        # Aspect ratio
+        aspect_float = round(width / height, 4) if height > 0 else 0
+        aspect_ratio = self._detect_aspect_ratio(width, height)
+
+        # Orientation
+        if width > height:
+            orientation = "landscape"
+        elif height > width:
+            orientation = "portrait"
+        else:
+            orientation = "square"
+
+        # Has alpha
+        has_alpha = channels == 4
+
+        # Pixel statistics (use first image in batch)
+        img_data = image[0]
+        min_value = round(float(img_data.min()), 4)
+        max_value = round(float(img_data.max()), 4)
+        mean_value = round(float(img_data.mean()), 4)
+
+        # Check if grayscale (R ≈ G ≈ B)
+        is_grayscale = False
+        if channels >= 3:
+            r, g, b = img_data[:, :, 0], img_data[:, :, 1], img_data[:, :, 2]
+            # Check if all channels are approximately equal
+            threshold = 0.01
+            rg_diff = float((r - g).abs().mean())
+            rb_diff = float((r - b).abs().mean())
+            is_grayscale = rg_diff < threshold and rb_diff < threshold
+
+        # Summary string
+        summary_parts = [
+            f"{width}x{height}",
+            f"{aspect_ratio}",
+            orientation,
+            f"{megapixels}MP",
+            f"{channels}ch",
+        ]
+        if batch_size > 1:
+            summary_parts.append(f"batch:{batch_size}")
+        if has_alpha:
+            summary_parts.append("alpha")
+        if is_grayscale:
+            summary_parts.append("grayscale")
+        summary = " | ".join(summary_parts)
+
+        return (
+            width,
+            height,
+            channels,
+            batch_size,
+            megapixels,
+            aspect_ratio,
+            orientation,
+            aspect_float,
+            has_alpha,
+            min_value,
+            max_value,
+            mean_value,
+            is_grayscale,
+            summary,
+        )
+
+    def _detect_aspect_ratio(self, width: int, height: int) -> str:
+        """Detect closest common aspect ratio."""
+        if height == 0:
+            return "unknown"
+
+        actual_ratio = width / height
+        tolerance = 0.02  # 2% tolerance
+
+        for w, h, name in self.ASPECT_RATIOS:
+            expected = w / h
+            if abs(actual_ratio - expected) / expected < tolerance:
+                return name
+
+        # If no match, return simplified ratio
+        from math import gcd
+        divisor = gcd(width, height)
+        simplified_w = width // divisor
+        simplified_h = height // divisor
+
+        # If simplified ratio is too complex, just return the decimal
+        if simplified_w > 100 or simplified_h > 100:
+            return f"{actual_ratio:.2f}:1"
+
+        return f"{simplified_w}:{simplified_h}"
 
 
 class _CompositeBase:
@@ -889,6 +1027,298 @@ class WorkflowMetadata:
         return (prompt_json, workflow_json)
 
 
+class TextCombine:
+    """
+    Combine multiple inputs into one string.
+
+    Accepts ANY data type and auto-converts to text.
+    Supports up to 10 inputs with customizable delimiter.
+    Empty inputs are skipped automatically.
+    """
+
+    DELIMITER_PRESETS = [
+        "newline",
+        "space",
+        "comma",
+        "comma_space",
+        "pipe",
+        "tab",
+        "none",
+        "custom",
+    ]
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        # Use "*" to accept any type
+        any_input = ("*", {})
+        return {
+            "required": {
+                "delimiter": (cls.DELIMITER_PRESETS, {"default": "newline"}),
+            },
+            "optional": {
+                "input_1": any_input,
+                "input_2": any_input,
+                "input_3": any_input,
+                "input_4": any_input,
+                "input_5": any_input,
+                "input_6": any_input,
+                "input_7": any_input,
+                "input_8": any_input,
+                "input_9": any_input,
+                "input_10": any_input,
+                "custom_delimiter": ("STRING", {"default": " | "}),
+                "skip_empty": ("BOOLEAN", {"default": True}),
+                "trim_whitespace": ("BOOLEAN", {"default": True}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "INT")
+    RETURN_NAMES = ("text", "count")
+    FUNCTION = "combine"
+    CATEGORY = "ComfyAngel/Utility"
+
+    def combine(
+        self,
+        delimiter: str,
+        input_1=None,
+        input_2=None,
+        input_3=None,
+        input_4=None,
+        input_5=None,
+        input_6=None,
+        input_7=None,
+        input_8=None,
+        input_9=None,
+        input_10=None,
+        custom_delimiter: str = " | ",
+        skip_empty: bool = True,
+        trim_whitespace: bool = True,
+    ):
+        # Get delimiter string
+        delim_map = {
+            "newline": "\n",
+            "space": " ",
+            "comma": ",",
+            "comma_space": ", ",
+            "pipe": " | ",
+            "tab": "\t",
+            "none": "",
+            "custom": custom_delimiter,
+        }
+        delim = delim_map.get(delimiter, "\n")
+
+        # Collect all inputs
+        inputs = [input_1, input_2, input_3, input_4, input_5, input_6, input_7, input_8, input_9, input_10]
+
+        # Process inputs
+        processed = []
+        for value in inputs:
+            if value is None:
+                continue
+
+            # Convert to string
+            text = self._to_string(value)
+
+            if trim_whitespace:
+                text = text.strip()
+            if skip_empty and not text:
+                continue
+            processed.append(text)
+
+        # Combine
+        result = delim.join(processed)
+        count = len(processed)
+
+        return (result, count)
+
+    def _to_string(self, value) -> str:
+        """Convert any value to string."""
+        import torch
+
+        # Already string
+        if isinstance(value, str):
+            return value
+
+        # Boolean
+        if isinstance(value, bool):
+            return "true" if value else "false"
+
+        # Numbers
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
+            # Format nicely, remove trailing zeros
+            if value == int(value):
+                return str(int(value))
+            return f"{value:.6g}"
+
+        # Torch tensor
+        if isinstance(value, torch.Tensor):
+            shape = list(value.shape)
+            dtype = str(value.dtype).replace("torch.", "")
+            if value.numel() == 1:
+                # Single value tensor
+                return f"{value.item():.6g}"
+            elif len(shape) == 4:
+                # Image tensor (B, H, W, C) or (B, C, H, W)
+                return f"Tensor[{shape[0]}x{shape[1]}x{shape[2]}x{shape[3]}] {dtype}"
+            else:
+                return f"Tensor{shape} {dtype}"
+
+        # List or tuple
+        if isinstance(value, (list, tuple)):
+            if len(value) == 0:
+                return ""
+            # If all items are simple, join them
+            if all(isinstance(v, (str, int, float, bool)) for v in value):
+                return ", ".join(self._to_string(v) for v in value)
+            return f"[{len(value)} items]"
+
+        # Dict
+        if isinstance(value, dict):
+            if len(value) == 0:
+                return ""
+            # Try to format as key=value pairs
+            try:
+                parts = [f"{k}={self._to_string(v)}" for k, v in list(value.items())[:5]]
+                if len(value) > 5:
+                    parts.append(f"...+{len(value)-5} more")
+                return "{" + ", ".join(parts) + "}"
+            except Exception:
+                return f"{{dict: {len(value)} keys}}"
+
+        # None
+        if value is None:
+            return ""
+
+        # Fallback: use str()
+        try:
+            return str(value)
+        except Exception:
+            return f"<{type(value).__name__}>"
+
+
+class TextPermutation:
+    """
+    Generate all combinations from a template with inline options.
+
+    Syntax: "white {dog,cat,pig} is {sitting,jumping} on the floor"
+    Output: List of all 6 combinations
+
+    Supports:
+    - Multiple groups: {a,b,c} ... {x,y}
+    - Escaped braces: \\{ and \\} for literal braces
+    - Custom separator (default: comma)
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "template": ("STRING", {
+                    "default": "a {red,green,blue} {cat,dog} sitting on a {chair,sofa}",
+                    "multiline": True,
+                }),
+            },
+            "optional": {
+                "separator": ("STRING", {"default": ","}),
+                "trim_options": ("BOOLEAN", {"default": True}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "INT")
+    RETURN_NAMES = ("texts", "count")
+    OUTPUT_IS_LIST = (True, False)
+    FUNCTION = "generate"
+    CATEGORY = "ComfyAngel/Utility"
+
+    def generate(self, template: str, separator: str = ",", trim_options: bool = True):
+        import re
+        from itertools import product
+
+        # Find all {option1,option2,...} groups
+        pattern = r'\{([^{}]+)\}'
+        matches = list(re.finditer(pattern, template))
+
+        if not matches:
+            # No groups found, return template as-is
+            return ([template], 1)
+
+        # Extract options from each group
+        groups = []
+        for match in matches:
+            options_str = match.group(1)
+            options = options_str.split(separator)
+            if trim_options:
+                options = [opt.strip() for opt in options]
+            groups.append(options)
+
+        # Generate all combinations
+        combinations = list(product(*groups))
+
+        # Build result strings
+        results = []
+        for combo in combinations:
+            result = template
+            # Replace each group with corresponding option
+            for match, option in zip(matches, combo):
+                result = result.replace(match.group(0), option, 1)
+            results.append(result)
+
+        return (results, len(results))
+
+
+class TextPermutationIndex:
+    """
+    Get a single text from permutation results by index.
+
+    Use with TextPermutation to iterate through combinations.
+    Supports auto-increment with control_after_generate.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "texts": ("STRING", {"forceInput": True}),
+                "index": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 999999,
+                    "step": 1,
+                    "control_after_generate": True,
+                }),
+            },
+            "optional": {
+                "loop": ("BOOLEAN", {"default": True}),
+            },
+        }
+
+    INPUT_IS_LIST = True
+    RETURN_TYPES = ("STRING", "INT", "INT")
+    RETURN_NAMES = ("text", "index", "total")
+    FUNCTION = "get_text"
+    CATEGORY = "ComfyAngel/Utility"
+
+    def get_text(self, texts: list, index: list, loop: list = None):
+        # Handle list inputs
+        texts = texts if isinstance(texts, list) else [texts]
+        idx = index[0] if isinstance(index, list) else index
+        do_loop = loop[0] if loop and isinstance(loop, list) else True
+
+        total = len(texts)
+        if total == 0:
+            return ("", 0, 0)
+
+        # Handle index
+        if do_loop:
+            idx = idx % total
+        else:
+            idx = min(idx, total - 1)
+
+        return (texts[idx], idx, total)
+
+
 # Export for registration
 NODE_CLASS_MAPPINGS = {
     "ComfyAngel_SmartCrop": SmartCrop,
@@ -900,6 +1330,9 @@ NODE_CLASS_MAPPINGS = {
     "ComfyAngel_ResolutionPicker": ResolutionPicker,
     "ComfyAngel_ImageBridge": ImageBridge,
     "ComfyAngel_WorkflowMetadata": WorkflowMetadata,
+    "ComfyAngel_TextCombine": TextCombine,
+    "ComfyAngel_TextPermutation": TextPermutation,
+    "ComfyAngel_TextPermutationIndex": TextPermutationIndex,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -912,4 +1345,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyAngel_ResolutionPicker": "Resolution Picker 🪽",
     "ComfyAngel_ImageBridge": "Image Bridge 🪽",
     "ComfyAngel_WorkflowMetadata": "Workflow Metadata 🪽",
+    "ComfyAngel_TextCombine": "Text Combine 🪽",
+    "ComfyAngel_TextPermutation": "Text Permutation 🪽",
+    "ComfyAngel_TextPermutationIndex": "Text Permutation Index 🪽",
 }
