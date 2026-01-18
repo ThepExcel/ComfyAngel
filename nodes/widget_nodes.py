@@ -4,9 +4,11 @@ Visual Widget Nodes for ComfyAngel.
 Nodes with enhanced JS widget interfaces.
 """
 
+import json
 import torch
 import numpy as np
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 
 from ..utils.tensor_ops import ensure_bhwc, to_pil, from_pil, clone_tensor
 
@@ -548,15 +550,19 @@ class ImageBridge:
             "optional": {
                 "filename_prefix": ("STRING", {"default": "ComfyAngel"}),
             },
+            "hidden": {
+                "prompt": "PROMPT",
+                "extra_pnginfo": "EXTRA_PNGINFO",
+            },
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("image", "metadata_raw")
     FUNCTION = "bridge"
     CATEGORY = "ComfyAngel/Utility"
     OUTPUT_NODE = True
 
-    def bridge(self, image, mode: str = "preview", filename_prefix: str = "ComfyAngel"):
+    def bridge(self, image, mode: str = "preview", filename_prefix: str = "ComfyAngel", prompt=None, extra_pnginfo=None):
         import os
         import time
         import random
@@ -566,6 +572,14 @@ class ImageBridge:
 
         # Generate unique ID for this execution
         unique_id = f"{int(time.time()*1000)}_{random.randint(1000,9999)}"
+
+        # Create metadata (same as official SaveImage)
+        metadata = PngInfo()
+        if prompt is not None:
+            metadata.add_text("prompt", json.dumps(prompt))
+        if extra_pnginfo is not None:
+            for key in extra_pnginfo:
+                metadata.add_text(key, json.dumps(extra_pnginfo[key]))
 
         results = []
         for i in range(image.shape[0]):
@@ -585,7 +599,7 @@ class ImageBridge:
                         break
                     counter += 1
 
-                pil_img.save(filepath, compress_level=4)
+                pil_img.save(filepath, pnginfo=metadata, compress_level=4)
 
                 results.append({
                     "filename": filename,
@@ -597,7 +611,7 @@ class ImageBridge:
                 temp_dir = folder_paths.get_temp_directory()
                 filename = f"imgbridge_{unique_id}_{i:03d}.png"
                 filepath = os.path.join(temp_dir, filename)
-                pil_img.save(filepath)
+                pil_img.save(filepath, pnginfo=metadata)
 
                 results.append({
                     "filename": filename,
@@ -605,7 +619,12 @@ class ImageBridge:
                     "type": "temp",
                 })
 
-        return {"ui": {"images": results}, "result": (image,)}
+        # Create metadata_raw from prompt (ComfyUI format)
+        metadata_raw = ""
+        if prompt is not None:
+            metadata_raw = json.dumps(prompt)
+
+        return {"ui": {"images": results}, "result": (image, metadata_raw)}
 
 
 class ResolutionPicker:

@@ -213,7 +213,7 @@ class ParameterOverlay:
                     "placeholder": "Or paste raw metadata here"
                 }),
                 "position": (["bottom_extend", "bottom_inside", "top_inside"],),
-                "font_size": ("INT", {"default": 14, "min": 8, "max": 32, "step": 1}),
+                "font_size": ("INT", {"default": 25, "min": 8, "max": 100, "step": 1}),
                 "bg_opacity": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.1}),
                 "show_prompt": ("BOOLEAN", {"default": False}),
             }
@@ -298,7 +298,7 @@ class CustomTextOverlay:
             },
             "optional": {
                 "position": (["bottom_extend", "bottom_inside", "top_inside"],),
-                "font_size": ("INT", {"default": 14, "min": 8, "max": 48, "step": 1}),
+                "font_size": ("INT", {"default": 25, "min": 8, "max": 100, "step": 1}),
                 "bg_opacity": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.1}),
                 "text_color": ("STRING", {"default": "#FFFFFF"}),
                 "bg_color": ("STRING", {"default": "#000000"}),

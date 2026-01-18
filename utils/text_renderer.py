@@ -128,6 +128,81 @@ class TextRenderer:
         bbox = draw.textbbox((0, 0), text, font=self.font)
         return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
+    def wrap_text(self, text: str, max_width: int) -> list[str]:
+        """
+        Wrap text to fit within max_width.
+
+        Args:
+            text: Text to wrap
+            max_width: Maximum width in pixels
+
+        Returns:
+            List of wrapped lines
+        """
+        if not text:
+            return []
+
+        # Account for padding
+        available_width = max_width - (self.padding * 2)
+
+        # Check if text fits
+        text_width, _ = self.get_text_size(text)
+        if text_width <= available_width:
+            return [text]
+
+        # Split by words
+        words = text.split(' ')
+        lines = []
+        current_line = ""
+
+        for word in words:
+            test_line = f"{current_line} {word}".strip() if current_line else word
+            test_width, _ = self.get_text_size(test_line)
+
+            if test_width <= available_width:
+                current_line = test_line
+            else:
+                # Word doesn't fit, check if current line has content
+                if current_line:
+                    lines.append(current_line)
+                    current_line = word
+                else:
+                    # Single word too long, force break by character
+                    current_line = self._break_word(word, available_width)
+                    if len(current_line) < len(word):
+                        # There's remaining text
+                        lines.append(current_line)
+                        current_line = word[len(current_line):]
+
+        if current_line:
+            lines.append(current_line)
+
+        return lines
+
+    def _break_word(self, word: str, max_width: int) -> str:
+        """Break a single word to fit within max_width."""
+        for i in range(len(word), 0, -1):
+            width, _ = self.get_text_size(word[:i])
+            if width <= max_width:
+                return word[:i]
+        return word[:1]  # At minimum return first character
+
+    def wrap_lines(self, lines: list[str], max_width: int) -> list[str]:
+        """
+        Wrap multiple lines to fit within max_width.
+
+        Args:
+            lines: List of text lines
+            max_width: Maximum width in pixels
+
+        Returns:
+            List of wrapped lines
+        """
+        wrapped = []
+        for line in lines:
+            wrapped.extend(self.wrap_text(line, max_width))
+        return wrapped
+
     def render_text_block(
         self,
         lines: list[str],
@@ -195,8 +270,11 @@ class TextRenderer:
 
         width, height = image.size
 
+        # Wrap lines to fit image width
+        wrapped_lines = self.wrap_lines(lines, width)
+
         # Render text block
-        text_block = self.render_text_block(lines, width, "bottom")
+        text_block = self.render_text_block(wrapped_lines, width, "bottom")
         text_height = text_block.size[1]
 
         # Create new image with extended height
@@ -234,8 +312,11 @@ class TextRenderer:
         width, height = image.size
         result = image.convert("RGBA")
 
+        # Wrap lines to fit image width
+        wrapped_lines = self.wrap_lines(lines, width)
+
         # Render text block
-        text_block = self.render_text_block(lines, width, position)
+        text_block = self.render_text_block(wrapped_lines, width, position)
         text_height = text_block.size[1]
 
         # Calculate position
