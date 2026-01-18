@@ -706,7 +706,33 @@ class ImageBridge:
         import random
         import folder_paths
 
-        image = ensure_bhwc(image)
+        # Handle list of tensors (from loop nodes)
+        if isinstance(image, list):
+            if len(image) == 0:
+                raise ValueError("Empty image list")
+
+            # Debug: print what's in the list
+            print(f"[ImageBridge] Received list with {len(image)} items:")
+            for i, item in enumerate(image):
+                print(f"  [{i}] type={type(item).__name__}, value={item if not isinstance(item, torch.Tensor) else f'Tensor{tuple(item.shape)}'}")
+
+            # Filter and concatenate only tensors
+            tensors = []
+            for img in image:
+                if isinstance(img, torch.Tensor):
+                    img = ensure_bhwc(img)
+                    tensors.append(img)
+                elif isinstance(img, list):
+                    # Nested list - flatten it
+                    for nested_img in img:
+                        if isinstance(nested_img, torch.Tensor):
+                            tensors.append(ensure_bhwc(nested_img))
+            if tensors:
+                image = torch.cat(tensors, dim=0)
+            else:
+                raise ValueError(f"No valid image tensors found in list. Got types: {[type(x).__name__ for x in image]}")
+        else:
+            image = ensure_bhwc(image)
 
         # Generate unique ID for this execution
         unique_id = f"{int(time.time()*1000)}_{random.randint(1000,9999)}"
@@ -1268,57 +1294,6 @@ class TextPermutation:
         return (results, len(results))
 
 
-class TextPermutationIndex:
-    """
-    Get a single text from permutation results by index.
-
-    Use with TextPermutation to iterate through combinations.
-    Supports auto-increment with control_after_generate.
-    """
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "texts": ("STRING", {"forceInput": True}),
-                "index": ("INT", {
-                    "default": 0,
-                    "min": 0,
-                    "max": 999999,
-                    "step": 1,
-                    "control_after_generate": True,
-                }),
-            },
-            "optional": {
-                "loop": ("BOOLEAN", {"default": True}),
-            },
-        }
-
-    INPUT_IS_LIST = True
-    RETURN_TYPES = ("STRING", "INT", "INT")
-    RETURN_NAMES = ("text", "index", "total")
-    FUNCTION = "get_text"
-    CATEGORY = "ComfyAngel/Utility"
-
-    def get_text(self, texts: list, index: list, loop: list = None):
-        # Handle list inputs
-        texts = texts if isinstance(texts, list) else [texts]
-        idx = index[0] if isinstance(index, list) else index
-        do_loop = loop[0] if loop and isinstance(loop, list) else True
-
-        total = len(texts)
-        if total == 0:
-            return ("", 0, 0)
-
-        # Handle index
-        if do_loop:
-            idx = idx % total
-        else:
-            idx = min(idx, total - 1)
-
-        return (texts[idx], idx, total)
-
-
 # Export for registration
 NODE_CLASS_MAPPINGS = {
     "ComfyAngel_SmartCrop": SmartCrop,
@@ -1332,7 +1307,6 @@ NODE_CLASS_MAPPINGS = {
     "ComfyAngel_WorkflowMetadata": WorkflowMetadata,
     "ComfyAngel_TextCombine": TextCombine,
     "ComfyAngel_TextPermutation": TextPermutation,
-    "ComfyAngel_TextPermutationIndex": TextPermutationIndex,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1347,5 +1321,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyAngel_WorkflowMetadata": "Workflow Metadata 🪽",
     "ComfyAngel_TextCombine": "Text Combine 🪽",
     "ComfyAngel_TextPermutation": "Text Permutation 🪽",
-    "ComfyAngel_TextPermutationIndex": "Text Permutation Index 🪽",
 }

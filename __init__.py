@@ -34,18 +34,26 @@ from .nodes.widget_nodes import (
     WorkflowMetadata,
     TextCombine,
     TextPermutation,
-    TextPermutationIndex,
     NODE_CLASS_MAPPINGS as WIDGET_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as WIDGET_DISPLAY_MAPPINGS,
 )
 
 # Import loader nodes
 from .nodes.loader_nodes import (
-    LoadImageFromFolder,
     LoadAllImagesFromFolder,
     SplitImageBatch,
     NODE_CLASS_MAPPINGS as LOADER_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as LOADER_DISPLAY_MAPPINGS,
+)
+
+# Import loop nodes
+from .nodes.loop_nodes import (
+    LoopStartSimple,
+    LoopEndSimple,
+    LoopStartAdvanced,
+    LoopEndAdvanced,
+    NODE_CLASS_MAPPINGS as LOOP_MAPPINGS,
+    NODE_DISPLAY_NAME_MAPPINGS as LOOP_DISPLAY_MAPPINGS,
 )
 
 
@@ -77,6 +85,10 @@ NODE_DISPLAY_NAME_MAPPINGS.update(WIDGET_DISPLAY_MAPPINGS)
 # Register loader nodes
 NODE_CLASS_MAPPINGS.update(LOADER_MAPPINGS)
 NODE_DISPLAY_NAME_MAPPINGS.update(LOADER_DISPLAY_MAPPINGS)
+
+# Register loop nodes
+NODE_CLASS_MAPPINGS.update(LOOP_MAPPINGS)
+NODE_DISPLAY_NAME_MAPPINGS.update(LOOP_DISPLAY_MAPPINGS)
 
 # JS widgets directory
 WEB_DIRECTORY = "./js"

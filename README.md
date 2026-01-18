@@ -1,6 +1,6 @@
 # ComfyAngel
 
-Parameter Overlay & Visual Widget nodes for ComfyUI
+Parameter Overlay, Visual Widgets & Loop nodes for ComfyUI
 
 **Display generation parameters directly on your images** - perfect for sharing, comparing, and archiving your AI art.
 
@@ -41,35 +41,75 @@ Then restart ComfyUI.
 
 ## Nodes
 
-### Loader Nodes
+### Loop Nodes
 
-#### Load Image from Folder 🪽
+True loop functionality **without Auto Queue**. Iterate through batches/lists and accumulate results.
 
-Load images from a folder one at a time for loop processing.
+#### Loop Start 🪽
+
+Start a loop over items (images, texts, etc.)
 
 | Input | Type | Description |
 |-------|------|-------------|
-| folder_path | STRING | Path to folder containing images |
-| index | INT | Image index (has control_after_generate for auto-increment) |
-| sort_by | ENUM | `name`, `modified_date`, `created_date` |
-| loop | BOOLEAN | Loop back to first image when reaching end (default: true) |
-| include_subdirs | BOOLEAN | Include images in subfolders (default: false) |
+| items | ANY | Batch/list to iterate over (IMAGE batch, list of strings, etc.) |
+| initial_value0-9 | ANY | Optional values to pass through/accumulate |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| image | IMAGE | Current image |
-| mask | MASK | Alpha channel as mask |
-| filename | STRING | Filename without extension |
-| filename_ext | STRING | Filename with extension |
-| metadata_raw | STRING | Raw metadata from PNG file |
-| index | INT | Current index |
-| total_count | INT | Total images in folder |
-
-**Use with Auto Queue:** Set index to "increment" mode, enable Auto Queue, and process entire folders automatically.
+| flow | FLOW_CONTROL | Connect to Loop End |
+| item | ANY | Current item from the batch |
+| index | INT | Current iteration index (0-based) |
+| total | INT | Total number of items |
+| is_last | BOOLEAN | True if this is the last iteration |
+| value0-9 | ANY | Pass-through values |
 
 ---
 
-#### Load Images from Folder as BATCH 🪽
+#### Loop End 🪽
+
+End a loop and collect accumulated results.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| flow | FLOW_CONTROL | Connect from Loop Start |
+| result0-9 | ANY | Values to accumulate across iterations |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| results0-9 | ANY | Accumulated results (batched tensors or lists) |
+
+**Features:**
+- For IMAGE/MASK tensors: Results are concatenated into a batch tensor
+- For strings/other types: Results are collected into a list
+
+---
+
+#### Loop Usage Example
+
+```
+[Text Permutation] → texts (list of prompts)
+         ↓
+    [Loop Start] → item (single prompt per iteration)
+         ↓
+    [Generate Image] → image
+         ↓
+    [Loop End] ← result0 = item, result1 = image
+         ↓
+    results0 = list of prompts
+    results1 = batch of images
+```
+
+**Key benefits:**
+- No Auto Queue required
+- See preview during each iteration
+- Accumulate multiple outputs (up to 10 slots)
+- Works with any data type
+
+---
+
+### Loader Nodes
+
+#### Load All Images from Folder 🪽
 
 Load ALL images from a folder as a batch tensor.
 
@@ -89,6 +129,8 @@ Load ALL images from a folder as a batch tensor.
 
 **Note:** All images are resized to match the first image's dimensions.
 
+**Use with Loop:** Connect `images` output to Loop Start's `items` input to process each image individually.
+
 ---
 
 #### Split Image Batch 🪽
@@ -107,7 +149,52 @@ Split a batch of images and output one at a time.
 | index | INT | Current index |
 | total_count | INT | Total images in batch |
 
-**Use case:** Combine with "Load Images from Folder as BATCH" to process batch images one at a time.
+**Use case:** For Auto Queue workflows (alternative to Loop nodes).
+
+---
+
+### Text Utility Nodes
+
+#### Text Permutation 🪽
+
+Generate all combinations from a template with inline options.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| template | STRING | Template with `{option1,option2}` syntax |
+| separator | STRING | Option separator (default: `,`) |
+| trim_options | BOOLEAN | Trim whitespace from options (default: true) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| texts | STRING[] | List of all combinations |
+| count | INT | Number of combinations |
+
+**Example:**
+```
+Input:  "a {cat,dog} sitting on a {chair,sofa}"
+Output: ["a cat sitting on a chair",
+         "a cat sitting on a sofa",
+         "a dog sitting on a chair",
+         "a dog sitting on a sofa"]
+```
+
+**Use with Loop:** Connect `texts` output directly to Loop Start's `items` input.
+
+---
+
+#### Text Combine 🪽
+
+Combine multiple text inputs with a separator.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| text1-4 | STRING | Text inputs to combine |
+| separator | STRING | Separator between texts (default: newline) |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| combined | STRING | Combined text |
 
 ---
 
@@ -220,7 +307,7 @@ Pass-through node with preview or save functionality.
 |--------|------|-------------|
 | image | IMAGE | Same image (pass-through) |
 
-**Use case:** Insert between nodes to preview intermediate results while continuing the workflow.
+**Use case:** Insert between nodes to preview intermediate results while continuing the workflow. Essential for seeing images during loop iterations.
 
 ---
 
