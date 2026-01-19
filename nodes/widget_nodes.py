@@ -11,6 +11,7 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 
 from ..utils.tensor_ops import ensure_bhwc, to_pil, from_pil, clone_tensor
+from ..utils.color_utils import hex_to_rgb, rgb_to_hex
 
 
 class SmartCrop:
@@ -49,45 +50,36 @@ class SmartCrop:
             return (image,)
 
         # Parse background color
-        bg_rgb = self._hex_to_rgb(bg_color)
+        bg_rgb = hex_to_rgb(bg_color, default=(0, 0, 0))
         bg_normalized = [c / 255.0 for c in bg_rgb]
 
-        results = []
-        for b in range(batch_size):
-            # Create output canvas with background color
-            canvas = torch.zeros((crop_height, crop_width, channels), dtype=image.dtype, device=image.device)
-            for c in range(min(channels, 3)):
-                canvas[:, :, c] = bg_normalized[c]
+        with torch.no_grad():
+            results = []
+            for b in range(batch_size):
+                # Create output canvas with background color
+                canvas = torch.zeros((crop_height, crop_width, channels), dtype=image.dtype, device=image.device)
+                for c in range(min(channels, 3)):
+                    canvas[:, :, c] = bg_normalized[c]
 
-            # Calculate source region (from original image)
-            src_x1 = max(0, x)
-            src_y1 = max(0, y)
-            src_x2 = min(img_width, x + crop_width)
-            src_y2 = min(img_height, y + crop_height)
+                # Calculate source region (from original image)
+                src_x1 = max(0, x)
+                src_y1 = max(0, y)
+                src_x2 = min(img_width, x + crop_width)
+                src_y2 = min(img_height, y + crop_height)
 
-            # Calculate destination region (on canvas)
-            dst_x1 = max(0, -x)
-            dst_y1 = max(0, -y)
-            dst_x2 = dst_x1 + (src_x2 - src_x1)
-            dst_y2 = dst_y1 + (src_y2 - src_y1)
+                # Calculate destination region (on canvas)
+                dst_x1 = max(0, -x)
+                dst_y1 = max(0, -y)
+                dst_x2 = dst_x1 + (src_x2 - src_x1)
+                dst_y2 = dst_y1 + (src_y2 - src_y1)
 
-            # Copy the overlapping region
-            if src_x2 > src_x1 and src_y2 > src_y1:
-                canvas[dst_y1:dst_y2, dst_x1:dst_x2, :] = image[b, src_y1:src_y2, src_x1:src_x2, :]
+                # Copy the overlapping region
+                if src_x2 > src_x1 and src_y2 > src_y1:
+                    canvas[dst_y1:dst_y2, dst_x1:dst_x2, :] = image[b, src_y1:src_y2, src_x1:src_x2, :]
 
-            results.append(canvas)
+                results.append(canvas)
 
         return (torch.stack(results, dim=0),)
-
-    def _hex_to_rgb(self, hex_color: str) -> tuple:
-        """Convert hex color to RGB tuple."""
-        hex_color = hex_color.lstrip("#")
-        if len(hex_color) == 3:
-            hex_color = "".join([c * 2 for c in hex_color])
-        try:
-            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        except ValueError:
-            return (0, 0, 0)
 
 
 class SolidColor:
@@ -117,37 +109,32 @@ class SolidColor:
 
     def generate(self, color: str, width: int, height: int, batch_size: int = 1):
         # Parse hex color
-        rgb = self._hex_to_rgb(color)
+        rgb = hex_to_rgb(color, default=(255, 255, 255))
 
-        # Create numpy array with the color
-        img_np = np.full((height, width, 3), rgb, dtype=np.float32) / 255.0
+        with torch.no_grad():
+            # Create numpy array with the color
+            img_np = np.full((height, width, 3), rgb, dtype=np.float32) / 255.0
 
-        # Convert to tensor
-        img_tensor = torch.from_numpy(img_np).unsqueeze(0)
+            # Convert to tensor
+            img_tensor = torch.from_numpy(img_np).unsqueeze(0)
 
-        # Repeat for batch
-        if batch_size > 1:
-            img_tensor = img_tensor.repeat(batch_size, 1, 1, 1)
+            # Repeat for batch
+            if batch_size > 1:
+                img_tensor = img_tensor.repeat(batch_size, 1, 1, 1)
 
         return (img_tensor,)
-
-    def _hex_to_rgb(self, hex_color: str) -> tuple:
-        """Convert hex color to RGB tuple."""
-        hex_color = hex_color.lstrip("#")
-        if len(hex_color) == 3:
-            hex_color = "".join([c * 2 for c in hex_color])
-        try:
-            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        except ValueError:
-            return (255, 255, 255)
 
 
 class ImageInfo:
     """
-    Display comprehensive information about an image.
+    Display essential information about an image.
 
-    Outputs technical properties like dimensions, aspect ratio,
-    pixel statistics, and format detection.
+    Outputs commonly used properties: dimensions, aspect ratio,
+    orientation, and a formatted summary string.
+
+    Note: v0.5.0 reduced outputs from 14 to 5 for better UX.
+    If you need detailed statistics (min/max/mean values, grayscale detection),
+    please request a separate ImageInfoDetailed node.
     """
 
     # Common aspect ratios for detection
@@ -173,8 +160,8 @@ class ImageInfo:
             },
         }
 
-    RETURN_TYPES = ("INT", "INT", "INT", "INT", "FLOAT", "STRING", "STRING", "FLOAT", "BOOLEAN", "FLOAT", "FLOAT", "FLOAT", "BOOLEAN", "STRING")
-    RETURN_NAMES = ("width", "height", "channels", "batch_size", "megapixels", "aspect_ratio", "orientation", "aspect_float", "has_alpha", "min_value", "max_value", "mean_value", "is_grayscale", "summary")
+    RETURN_TYPES = ("INT", "INT", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("width", "height", "aspect_ratio", "orientation", "summary")
     FUNCTION = "get_info"
     CATEGORY = "ComfyAngel/Utility"
 
@@ -182,11 +169,7 @@ class ImageInfo:
         image = ensure_bhwc(image)
         batch_size, height, width, channels = image.shape
 
-        # Megapixels
-        megapixels = round((width * height) / 1_000_000, 2)
-
         # Aspect ratio
-        aspect_float = round(width / height, 4) if height > 0 else 0
         aspect_ratio = self._detect_aspect_ratio(width, height)
 
         # Orientation
@@ -197,55 +180,25 @@ class ImageInfo:
         else:
             orientation = "square"
 
-        # Has alpha
-        has_alpha = channels == 4
-
-        # Pixel statistics (use first image in batch)
-        img_data = image[0]
-        min_value = round(float(img_data.min()), 4)
-        max_value = round(float(img_data.max()), 4)
-        mean_value = round(float(img_data.mean()), 4)
-
-        # Check if grayscale (R ≈ G ≈ B)
-        is_grayscale = False
-        if channels >= 3:
-            r, g, b = img_data[:, :, 0], img_data[:, :, 1], img_data[:, :, 2]
-            # Check if all channels are approximately equal
-            threshold = 0.01
-            rg_diff = float((r - g).abs().mean())
-            rb_diff = float((r - b).abs().mean())
-            is_grayscale = rg_diff < threshold and rb_diff < threshold
-
         # Summary string
+        megapixels = round((width * height) / 1_000_000, 2)
         summary_parts = [
             f"{width}x{height}",
             f"{aspect_ratio}",
             orientation,
             f"{megapixels}MP",
-            f"{channels}ch",
         ]
         if batch_size > 1:
             summary_parts.append(f"batch:{batch_size}")
-        if has_alpha:
+        if channels == 4:
             summary_parts.append("alpha")
-        if is_grayscale:
-            summary_parts.append("grayscale")
         summary = " | ".join(summary_parts)
 
         return (
             width,
             height,
-            channels,
-            batch_size,
-            megapixels,
             aspect_ratio,
             orientation,
-            aspect_float,
-            has_alpha,
-            min_value,
-            max_value,
-            mean_value,
-            is_grayscale,
             summary,
         )
 
@@ -466,14 +419,17 @@ class SmartCompositeXY(_CompositeBase):
                 "x": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
                 "y": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
                 "anchor": (cls.ANCHORS, {"default": "top_left"}),
-                "scale": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 500.0, "step": 1.0}),
+                "scale_percent": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 500.0, "step": 1.0}),
                 "blend_mode": (cls.BLEND_MODES, {"default": "normal"}),
                 "opacity": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 100.0, "step": 1.0}),
             },
+            "optional": {
+                "mask": ("MASK",),
+            },
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
+    RETURN_TYPES = ("IMAGE", "INT", "INT")
+    RETURN_NAMES = ("image", "x", "y")
     FUNCTION = "composite"
     CATEGORY = "ComfyAngel/Composite"
 
@@ -484,9 +440,10 @@ class SmartCompositeXY(_CompositeBase):
         x: int,
         y: int,
         anchor: str,
-        scale: float,
+        scale_percent: float,
         blend_mode: str,
         opacity: float,
+        mask=None,
     ):
         canvas = ensure_bhwc(canvas)
         overlay = ensure_bhwc(overlay)
@@ -497,27 +454,68 @@ class SmartCompositeXY(_CompositeBase):
 
         results = []
 
-        for i in range(batch_size):
-            canvas_img = to_pil(result, i)
-            overlay_idx = min(i, overlay_batch - 1)
-            overlay_img = to_pil(overlay, overlay_idx)
+        with torch.no_grad():
+            for i in range(batch_size):
+                canvas_img = to_pil(result, i)
+                overlay_idx = min(i, overlay_batch - 1)
+                overlay_img = to_pil(overlay, overlay_idx)
 
-            # Scale overlay
-            overlay_img = self._scale_overlay(overlay_img, scale)
+                # Scale overlay
+                overlay_img = self._scale_overlay(overlay_img, scale_percent)
 
-            # Calculate position based on anchor
-            pos_x, pos_y = self._calc_anchor_position(
-                x, y, anchor, overlay_img.width, overlay_img.height
-            )
+                # Apply mask if provided
+                if mask is not None:
+                    # Ensure mask is 3D [B, H, W]
+                    if mask.dim() == 2:
+                        mask = mask.unsqueeze(0)
 
-            # Apply blend mode and composite
-            composited = self._blend_images(
-                canvas_img, overlay_img, pos_x, pos_y, blend_mode, opacity / 100.0
-            )
+                    mask_idx = min(i, mask.shape[0] - 1)
+                    mask_tensor = mask[mask_idx]
 
-            results.append(from_pil(composited))
+                    # Get mask dimensions (before scaling)
+                    original_overlay = to_pil(overlay, overlay_idx)
+                    mask_h, mask_w = mask_tensor.shape
 
-        return (torch.cat(results, dim=0),)
+                    # Resize mask to match scaled overlay dimensions
+                    scaled_w = overlay_img.width
+                    scaled_h = overlay_img.height
+
+                    # Convert mask tensor to PIL for resizing
+                    mask_np = (mask_tensor.cpu().numpy() * 255).astype(np.uint8)
+                    mask_img = Image.fromarray(mask_np, mode="L")
+
+                    # Resize mask to match original overlay size if needed
+                    if mask_img.size != original_overlay.size:
+                        mask_img = mask_img.resize(original_overlay.size, Image.LANCZOS)
+
+                    # Then resize to scaled overlay size
+                    if mask_img.size != (scaled_w, scaled_h):
+                        mask_img = mask_img.resize((scaled_w, scaled_h), Image.LANCZOS)
+
+                    # Apply mask as alpha channel
+                    if overlay_img.mode != "RGBA":
+                        overlay_img = overlay_img.convert("RGBA")
+
+                    # Multiply existing alpha with mask
+                    r, g, b, a = overlay_img.split()
+                    # Mask is 0-1 where 1=keep, 0=discard
+                    # PIL alpha is 0=transparent, 255=opaque
+                    # ComfyUI MASK is 0=masked, 1=unmasked
+                    overlay_img = Image.merge("RGBA", (r, g, b, mask_img))
+
+                # Calculate position based on anchor
+                pos_x, pos_y = self._calc_anchor_position(
+                    x, y, anchor, overlay_img.width, overlay_img.height
+                )
+
+                # Apply blend mode and composite
+                composited = self._blend_images(
+                    canvas_img, overlay_img, pos_x, pos_y, blend_mode, opacity / 100.0
+                )
+
+                results.append(from_pil(composited))
+
+        return (torch.cat(results, dim=0), x, y)
 
     def _calc_anchor_position(self, x: int, y: int, anchor: str, w: int, h: int):
         """Calculate top-left position based on anchor point."""
@@ -553,14 +551,17 @@ class SmartCompositeAlign(_CompositeBase):
                 "alignment": (cls.ANCHORS, {"default": "center"}),
                 "margin_x": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
                 "margin_y": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
-                "scale": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 500.0, "step": 1.0}),
+                "scale_percent": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 500.0, "step": 1.0}),
                 "blend_mode": (cls.BLEND_MODES, {"default": "normal"}),
                 "opacity": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 100.0, "step": 1.0}),
             },
+            "optional": {
+                "mask": ("MASK",),
+            },
         }
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
+    RETURN_TYPES = ("IMAGE", "INT", "INT")
+    RETURN_NAMES = ("image", "x", "y")
     FUNCTION = "composite"
     CATEGORY = "ComfyAngel/Composite"
 
@@ -571,9 +572,10 @@ class SmartCompositeAlign(_CompositeBase):
         alignment: str,
         margin_x: int,
         margin_y: int,
-        scale: float,
+        scale_percent: float,
         blend_mode: str,
         opacity: float,
+        mask=None,
     ):
         canvas = ensure_bhwc(canvas)
         overlay = ensure_bhwc(overlay)
@@ -585,29 +587,70 @@ class SmartCompositeAlign(_CompositeBase):
 
         results = []
 
-        for i in range(batch_size):
-            canvas_img = to_pil(result, i)
-            overlay_idx = min(i, overlay_batch - 1)
-            overlay_img = to_pil(overlay, overlay_idx)
+        with torch.no_grad():
+            for i in range(batch_size):
+                canvas_img = to_pil(result, i)
+                overlay_idx = min(i, overlay_batch - 1)
+                overlay_img = to_pil(overlay, overlay_idx)
 
-            # Scale overlay
-            overlay_img = self._scale_overlay(overlay_img, scale)
+                # Scale overlay
+                overlay_img = self._scale_overlay(overlay_img, scale_percent)
 
-            # Calculate position based on alignment
-            pos_x, pos_y = self._calc_alignment_position(
-                alignment, canvas_w, canvas_h,
-                overlay_img.width, overlay_img.height,
-                margin_x, margin_y
-            )
+                # Apply mask if provided
+                if mask is not None:
+                    # Ensure mask is 3D [B, H, W]
+                    if mask.dim() == 2:
+                        mask = mask.unsqueeze(0)
 
-            # Apply blend mode and composite
-            composited = self._blend_images(
-                canvas_img, overlay_img, pos_x, pos_y, blend_mode, opacity / 100.0
-            )
+                    mask_idx = min(i, mask.shape[0] - 1)
+                    mask_tensor = mask[mask_idx]
 
-            results.append(from_pil(composited))
+                    # Get mask dimensions (before scaling)
+                    original_overlay = to_pil(overlay, overlay_idx)
+                    mask_h, mask_w = mask_tensor.shape
 
-        return (torch.cat(results, dim=0),)
+                    # Resize mask to match scaled overlay dimensions
+                    scaled_w = overlay_img.width
+                    scaled_h = overlay_img.height
+
+                    # Convert mask tensor to PIL for resizing
+                    mask_np = (mask_tensor.cpu().numpy() * 255).astype(np.uint8)
+                    mask_img = Image.fromarray(mask_np, mode="L")
+
+                    # Resize mask to match original overlay size if needed
+                    if mask_img.size != original_overlay.size:
+                        mask_img = mask_img.resize(original_overlay.size, Image.LANCZOS)
+
+                    # Then resize to scaled overlay size
+                    if mask_img.size != (scaled_w, scaled_h):
+                        mask_img = mask_img.resize((scaled_w, scaled_h), Image.LANCZOS)
+
+                    # Apply mask as alpha channel
+                    if overlay_img.mode != "RGBA":
+                        overlay_img = overlay_img.convert("RGBA")
+
+                    # Multiply existing alpha with mask
+                    r, g, b, a = overlay_img.split()
+                    # Mask is 0-1 where 1=keep, 0=discard
+                    # PIL alpha is 0=transparent, 255=opaque
+                    # ComfyUI MASK is 0=masked, 1=unmasked
+                    overlay_img = Image.merge("RGBA", (r, g, b, mask_img))
+
+                # Calculate position based on alignment
+                pos_x, pos_y = self._calc_alignment_position(
+                    alignment, canvas_w, canvas_h,
+                    overlay_img.width, overlay_img.height,
+                    margin_x, margin_y
+                )
+
+                # Apply blend mode and composite
+                composited = self._blend_images(
+                    canvas_img, overlay_img, pos_x, pos_y, blend_mode, opacity / 100.0
+                )
+
+                results.append(from_pil(composited))
+
+        return (torch.cat(results, dim=0), pos_x, pos_y)
 
     def _calc_alignment_position(
         self, alignment: str, canvas_w: int, canvas_h: int,
@@ -632,8 +675,7 @@ class ColorPicker:
     """
     Pick a color with visual color picker.
 
-    Supports RGB, HSL, and Hex formats.
-    Can pick color from connected image using eyedropper.
+    JS widget provides eyedropper to pick color from connected image.
     Outputs hex color string that connects to Solid Color.
     """
 
@@ -654,6 +696,9 @@ class ColorPicker:
     CATEGORY = "ComfyAngel/Widget"
 
     def get_color(self, color_hex: str, image=None):
+        # JS widget handles eyedropper and updates color_hex directly
+        # image input is for JS widget preview only
+
         # Validate and normalize hex color
         color_hex = color_hex.strip()
         if not color_hex.startswith("#"):
@@ -711,11 +756,6 @@ class ImageBridge:
             if len(image) == 0:
                 raise ValueError("Empty image list")
 
-            # Debug: print what's in the list
-            print(f"[ImageBridge] Received list with {len(image)} items:")
-            for i, item in enumerate(image):
-                print(f"  [{i}] type={type(item).__name__}, value={item if not isinstance(item, torch.Tensor) else f'Tensor{tuple(item.shape)}'}")
-
             # Filter and concatenate only tensors
             tensors = []
             for img in image:
@@ -746,42 +786,43 @@ class ImageBridge:
                 metadata.add_text(key, json.dumps(extra_pnginfo[key]))
 
         results = []
-        for i in range(image.shape[0]):
-            pil_img = to_pil(image, i)
+        with torch.no_grad():
+            for i in range(image.shape[0]):
+                pil_img = to_pil(image, i)
 
-            if mode == "save":
-                # Save to output folder
-                output_dir = folder_paths.get_output_directory()
-                subfolder = ""
+                if mode == "save":
+                    # Save to output folder
+                    output_dir = folder_paths.get_output_directory()
+                    subfolder = ""
 
-                # Generate unique filename
-                counter = 1
-                while True:
-                    filename = f"{filename_prefix}_{counter:05d}.png"
-                    filepath = os.path.join(output_dir, filename)
-                    if not os.path.exists(filepath):
-                        break
-                    counter += 1
+                    # Generate unique filename
+                    counter = 1
+                    while True:
+                        filename = f"{filename_prefix}_{counter:05d}.png"
+                        filepath = os.path.join(output_dir, filename)
+                        if not os.path.exists(filepath):
+                            break
+                        counter += 1
 
-                pil_img.save(filepath, pnginfo=metadata, compress_level=4)
+                    pil_img.save(filepath, pnginfo=metadata, compress_level=4)
 
-                results.append({
-                    "filename": filename,
-                    "subfolder": subfolder,
-                    "type": "output",
-                })
-            else:
-                # Preview - save to temp folder with unique name
-                temp_dir = folder_paths.get_temp_directory()
-                filename = f"imgbridge_{unique_id}_{i:03d}.png"
-                filepath = os.path.join(temp_dir, filename)
-                pil_img.save(filepath, pnginfo=metadata)
+                    results.append({
+                        "filename": filename,
+                        "subfolder": subfolder,
+                        "type": "output",
+                    })
+                else:
+                    # Preview - save to temp folder with unique name
+                    temp_dir = folder_paths.get_temp_directory()
+                    filename = f"imgbridge_{unique_id}_{i:03d}.png"
+                    filepath = os.path.join(temp_dir, filename)
+                    pil_img.save(filepath, pnginfo=metadata)
 
-                results.append({
-                    "filename": filename,
-                    "subfolder": "",
-                    "type": "temp",
-                })
+                    results.append({
+                        "filename": filename,
+                        "subfolder": "",
+                        "type": "temp",
+                    })
 
         return {"ui": {"images": results}, "result": (image,)}
 
@@ -1001,19 +1042,25 @@ class ResolutionPicker:
     CATEGORY = "ComfyAngel/Utility"
 
     def get_resolution(self, aspect_ratio: str, resolution: str):
-        # Find resolution in selected aspect ratio first
+        # First try to find in selected aspect ratio
         if aspect_ratio in self.RESOLUTIONS:
             resolutions = self.RESOLUTIONS[aspect_ratio]
             if resolution in resolutions:
                 width, height = resolutions[resolution]
                 return (width, height, aspect_ratio)
+            else:
+                # Resolution not in this aspect - use first one
+                first_res = list(resolutions.keys())[0]
+                width, height = resolutions[first_res]
+                return (width, height, aspect_ratio)
 
-        # Fallback: search all aspect ratios
+        # Fallback: search all aspect ratios (should not reach here normally)
         for aspect, resolutions in self.RESOLUTIONS.items():
             if resolution in resolutions:
                 width, height = resolutions[resolution]
                 return (width, height, aspect)
 
+        # Ultimate fallback
         return (1024, 1024, "1:1 (Square)")
 
 
@@ -1102,6 +1149,7 @@ class TextCombine:
     RETURN_NAMES = ("text", "count")
     FUNCTION = "combine"
     CATEGORY = "ComfyAngel/Utility"
+    OUTPUT_NODE = True  # Show preview in node after execution
 
     def combine(
         self,
@@ -1155,7 +1203,11 @@ class TextCombine:
         result = delim.join(processed)
         count = len(processed)
 
-        return (result, count)
+        # Return with UI preview
+        return {
+            "ui": {"text": [result]},
+            "result": (result, count)
+        }
 
     def _to_string(self, value) -> str:
         """Convert any value to string."""
@@ -1281,6 +1333,11 @@ class TextPermutation:
 
         # Generate all combinations
         combinations = list(product(*groups))
+
+        # Prevent memory explosion
+        MAX_COMBINATIONS = 10000
+        if len(combinations) > MAX_COMBINATIONS:
+            raise ValueError(f"Too many combinations ({len(combinations)}). Maximum allowed: {MAX_COMBINATIONS}")
 
         # Build result strings
         results = []
