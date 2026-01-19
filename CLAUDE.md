@@ -212,19 +212,29 @@ metadata["prompt"] = '{"3": {"class_type": "KSampler", "inputs": {...}}}'
 
 ## Development Workflow
 
-### WSL + Windows ComfyUI Setup
+### WSL + Windows: Symlink vs Junction
 
-Dev ผ่าน WSL แต่ ComfyUI รันบน Windows ต้องใช้ **Junction** (ไม่ใช่ symlink) เพราะ:
-- `ln -s` สร้าง Linux symlink ที่ Windows ไม่เข้าใจ
-- `mklink /D` ต้องใช้ Admin privileges
-- `mklink /J` (Junction) ไม่ต้อง Admin และ Windows เข้าใจ
+| Type | ใช้เมื่อ | Command |
+|------|---------|---------|
+| **Symlink** (`ln -s`) | Link ภายใน WSL (เช่น skills) | `ln -s /mnt/d/source /mnt/d/target` |
+| **Junction** (`mklink /J`) | Sync ไป Windows app (เช่น ComfyUI) | `cmd.exe /c "mklink /J target source"` |
+
+**ทำไมต้องแยก:**
+- `ln -s` → Linux symlink ที่ **Windows ไม่เข้าใจ**
+- `mklink /J` → Windows Junction ที่ **Windows เข้าใจ** แต่ต้องรันจาก cmd
+
+**ตัวอย่างการใช้งาน:**
 
 ```bash
-# สร้าง Junction จาก WSL
-cmd.exe /c "mklink /J D:\\ComfyUI_windows_portable\\ComfyUI\\custom_nodes\\ComfyAngel D:\\ComfyAngel"
+# 1. Symlink สำหรับ internal (skills, refs)
+ln -s /mnt/d/claude-private/skills/comfyui-node-builder .claude/skills/
+
+# 2. Junction สำหรับ sync ไป ComfyUI portable
+cd /mnt/d/ComfyUI_windows_portable/ComfyUI/custom_nodes
+cmd.exe /c "mklink /J ComfyAngel D:\\ComfyAngel"
 ```
 
-ผลลัพธ์: แก้โค้ดที่ `/mnt/d/ComfyAngel` (WSL) → ComfyUI บน Windows เห็นทันที
+**ผลลัพธ์:** แก้โค้ดที่ `/mnt/d/ComfyAngel` (WSL) → ComfyUI บน Windows เห็นทันที
 
 ### Subagent Strategy
 
@@ -283,6 +293,34 @@ def process(self, required_input, optional_input=None):
         # Use optional
     else:
         # Default behavior
+```
+
+---
+
+## Custom Skills
+
+**Location:** `.claude/skills/` (symlinked from `D:\claude-private\skills\`)
+
+### ComfyUI Node Designer (`/comfyui-node-designer`)
+ออกแบบ node concept ด้วย Design Thinking และ UX/UI focus
+- วิเคราะห์ pain points
+- หาช่องว่างในตลาด
+- ออกแบบ node spec
+- ตรวจสอบ project nodes ที่มีอยู่
+- ส่งต่อให้ builder
+
+### ComfyUI Node Builder (`/comfyui-node-builder`)
+เขียน code ตาม spec จาก designer
+- Python backend (V1/V3 API)
+- JavaScript widgets
+- Tensor handling
+- Memory management
+- Registry publishing
+
+**Usage:**
+```
+/comfyui-node-designer   # ออกแบบ node ใหม่
+/comfyui-node-builder    # เขียน code ตาม design
 ```
 
 ---
