@@ -21,6 +21,7 @@ class LoadAllImagesFromFolder:
 
     SUPPORTED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif'}
     SORT_OPTIONS = ["name", "modified_date", "created_date"]
+    RESIZE_OPTIONS = ["disabled", "resize_to_first", "resize_to_largest", "resize_to_smallest"]
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -36,11 +37,13 @@ class LoadAllImagesFromFolder:
                 "max_images": ("INT", {"default": 0, "min": 0, "max": 1000, "step": 1}),
                 "start_index": ("INT", {"default": 0, "min": 0, "max": 999999, "step": 1}),
                 "include_subdirs": ("BOOLEAN", {"default": False}),
+                "resize_mode": (cls.RESIZE_OPTIONS, {"default": "disabled"}),
             }
         }
 
     RETURN_TYPES = ("IMAGE", "STRING", "INT")
     RETURN_NAMES = ("images", "filenames", "count")
+    OUTPUT_IS_LIST = (True, False, False)
     FUNCTION = "load_images"
     CATEGORY = "ComfyAngel/Loader"
 
@@ -51,6 +54,7 @@ class LoadAllImagesFromFolder:
         max_images: int = 0,
         start_index: int = 0,
         include_subdirs: bool = False,
+        resize_mode: str = "disabled",
     ):
         # Validate folder path
         if not folder_path or not os.path.isdir(folder_path):
@@ -73,10 +77,30 @@ class LoadAllImagesFromFolder:
         if not image_files:
             raise ValueError(f"No images after applying start_index={start_index}")
 
-        # Load first image to get dimensions
-        first_img = Image.open(image_files[0])
-        first_img = ImageOps.exif_transpose(first_img)
-        target_size = first_img.size  # (width, height)
+        # Determine target size based on resize_mode
+        target_size = None
+        if resize_mode != "disabled":
+            if resize_mode == "resize_to_first":
+                first_img = Image.open(image_files[0])
+                first_img = ImageOps.exif_transpose(first_img)
+                target_size = first_img.size
+            elif resize_mode in ("resize_to_largest", "resize_to_smallest"):
+                # Scan all images to find target size
+                sizes = []
+                for file_path in image_files:
+                    img = Image.open(file_path)
+                    img = ImageOps.exif_transpose(img)
+                    sizes.append(img.size)
+                    img.close()
+
+                if resize_mode == "resize_to_largest":
+                    max_w = max(s[0] for s in sizes)
+                    max_h = max(s[1] for s in sizes)
+                    target_size = (max_w, max_h)
+                else:  # resize_to_smallest
+                    min_w = min(s[0] for s in sizes)
+                    min_h = min(s[1] for s in sizes)
+                    target_size = (min_w, min_h)
 
         # Load all images
         tensors = []
@@ -87,8 +111,8 @@ class LoadAllImagesFromFolder:
                 img = Image.open(file_path)
                 img = ImageOps.exif_transpose(img)
 
-                # Resize to match first image
-                if img.size != target_size:
+                # Resize if target_size is set
+                if target_size and img.size != target_size:
                     img = img.resize(target_size, Image.LANCZOS)
 
                 # Convert to RGB
@@ -96,18 +120,18 @@ class LoadAllImagesFromFolder:
                     img = img.point(lambda i: i * (1 / 255))
                 img = img.convert("RGB")
 
-                # Convert to tensor
+                # Convert to tensor (H, W, C) with batch dim
                 img_np = np.array(img).astype(np.float32) / 255.0
-                tensors.append(torch.from_numpy(img_np))
+                tensor = torch.from_numpy(img_np).unsqueeze(0)  # (1, H, W, C)
+                tensors.append(tensor)
 
                 # Store filename
                 filenames.append(os.path.basename(file_path))
 
-            # Stack into batch tensor (B, H, W, C)
-            batch_tensor = torch.stack(tensors, dim=0)
             filenames_str = "\n".join(filenames)
 
-            return (batch_tensor, filenames_str, len(filenames))
+            # Return as list (OUTPUT_IS_LIST handles this)
+            return (tensors, filenames_str, len(filenames))
 
     def _get_image_files(self, folder_path: str, include_subdirs: bool) -> list[str]:
         """Get list of valid image files from folder."""
