@@ -38,6 +38,124 @@ function saveFolderToHistory(folderPath) {
     }
 }
 
+// Open native folder picker using File System Access API (no upload warning!)
+async function openNativeFolderPicker(onSelect) {
+    try {
+        // Check if showDirectoryPicker is available
+        if (!window.showDirectoryPicker) {
+            // Fallback to webkitdirectory input
+            openFolderPickerFallback(onSelect);
+            return;
+        }
+
+        // Open native folder picker - no "upload files" warning!
+        const dirHandle = await window.showDirectoryPicker({ mode: "read" });
+        const folderName = dirHandle.name;
+
+        // Collect sample filenames from the directory
+        const sampleFiles = [];
+        try {
+            for await (const entry of dirHandle.values()) {
+                if (sampleFiles.length >= 5) break;
+                sampleFiles.push(entry.name);
+            }
+        } catch (e) {
+            console.log("Could not list directory contents:", e);
+        }
+
+        // Ask backend to resolve the full path
+        try {
+            const response = await fetch("/comfyangel/resolve_folder", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    folder_name: folderName,
+                    sample_files: sampleFiles
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.path) {
+                    onSelect(data.path);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.error("Resolve folder error:", e);
+        }
+
+        // Fallback: ask user to enter path
+        const fullPath = prompt(
+            `Selected folder: "${folderName}"\n\nCould not auto-detect full path.\nPlease enter the full path:`,
+            folderName
+        );
+        if (fullPath) onSelect(fullPath);
+
+    } catch (e) {
+        if (e.name === "AbortError") {
+            // User cancelled - do nothing
+            return;
+        }
+        console.error("Folder picker error:", e);
+        // Fallback to webkitdirectory input
+        openFolderPickerFallback(onSelect);
+    }
+}
+
+// Fallback for browsers without showDirectoryPicker
+function openFolderPickerFallback(onSelect) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.webkitdirectory = true;
+    input.style.display = "none";
+
+    input.addEventListener("change", async () => {
+        if (input.files && input.files.length > 0) {
+            const firstFile = input.files[0];
+            const relativePath = firstFile.webkitRelativePath;
+            const folderName = relativePath.split("/")[0];
+
+            const sampleFiles = [];
+            for (let i = 0; i < Math.min(5, input.files.length); i++) {
+                const parts = input.files[i].webkitRelativePath.split("/");
+                if (parts.length >= 2) {
+                    sampleFiles.push(parts.slice(1).join("/"));
+                }
+            }
+
+            try {
+                const response = await fetch("/comfyangel/resolve_folder", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ folder_name: folderName, sample_files: sampleFiles })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.path) {
+                        onSelect(data.path);
+                        document.body.removeChild(input);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.error("Resolve folder error:", e);
+            }
+
+            const fullPath = prompt(
+                `Selected folder: "${folderName}"\n\nPlease enter the full path:`,
+                folderName
+            );
+            if (fullPath) onSelect(fullPath);
+        }
+        document.body.removeChild(input);
+    });
+
+    document.body.appendChild(input);
+    input.click();
+}
+
 // Validate folder and count images
 async function validateFolder(folderPath, includeSubdirs = false) {
     if (!folderPath || folderPath.trim() === "") {
@@ -106,8 +224,28 @@ app.registerExtension({
 
             if (!folderWidget) return result;
 
+            // Add Browse Folder button (uses native OS folder picker)
+            const browseBtn = this.addWidget("button", "📁 Browse Folder", null, async () => {
+                const onFolderSelected = async (selectedPath) => {
+                    folderWidget.value = selectedPath;
+                    saveFolderToHistory(selectedPath);
+
+                    // Auto-validate after selection
+                    const includeSubdirs = includeSubdirsWidget?.value || false;
+                    const result = await validateFolder(selectedPath, includeSubdirs);
+                    if (validationWidget) {
+                        validationWidget.validationResult = result;
+                        app.graph.setDirtyCanvas(true);
+                    }
+                };
+
+                // Use webkitdirectory input - shows native OS folder picker
+                openNativeFolderPicker(onFolderSelected);
+            });
+            browseBtn.serialize = false;
+
             // Add validation button
-            const validateBtn = this.addWidget("button", "Validate Folder", null, async () => {
+            const validateBtn = this.addWidget("button", "✓ Validate Folder", null, async () => {
                 const path = folderWidget.value;
                 const includeSubdirs = includeSubdirsWidget?.value || false;
                 const result = await validateFolder(path, includeSubdirs);
