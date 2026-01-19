@@ -212,6 +212,20 @@ metadata["prompt"] = '{"3": {"class_type": "KSampler", "inputs": {...}}}'
 
 ## Development Workflow
 
+### WSL + Windows ComfyUI Setup
+
+Dev ผ่าน WSL แต่ ComfyUI รันบน Windows ต้องใช้ **Junction** (ไม่ใช่ symlink) เพราะ:
+- `ln -s` สร้าง Linux symlink ที่ Windows ไม่เข้าใจ
+- `mklink /D` ต้องใช้ Admin privileges
+- `mklink /J` (Junction) ไม่ต้อง Admin และ Windows เข้าใจ
+
+```bash
+# สร้าง Junction จาก WSL
+cmd.exe /c "mklink /J D:\\ComfyUI_windows_portable\\ComfyUI\\custom_nodes\\ComfyAngel D:\\ComfyAngel"
+```
+
+ผลลัพธ์: แก้โค้ดที่ `/mnt/d/ComfyAngel` (WSL) → ComfyUI บน Windows เห็นทันที
+
 ### Subagent Strategy
 
 **ใช้ subagent (Task tool) ให้เป็นประโยชน์:**
