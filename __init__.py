@@ -26,7 +26,6 @@ from .nodes.widget_nodes import (
     SmartCrop,
     SolidColor,
     SmartCompositeXY,
-    SmartCompositeAlign,
     ColorPicker,
     ImageInfo,
     ResolutionPicker,
@@ -55,6 +54,14 @@ from .nodes.loop_nodes import (
     NODE_CLASS_MAPPINGS as LOOP_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as LOOP_DISPLAY_MAPPINGS,
 )
+
+# Register API routes
+try:
+    from . import api_routes
+except ImportError:
+    print("[ComfyAngel] Warning: Could not import api_routes")
+except Exception as e:
+    print(f"[ComfyAngel] Error loading api_routes: {e}")
 
 
 # V3 API registration

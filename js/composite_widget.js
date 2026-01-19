@@ -10,46 +10,24 @@ app.registerExtension({
     name: "ComfyAngel.CompositeWidget",
 
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        // Support both SmartCompositeXY and SmartCompositeAlign
-        const supportedNodes = [
-            "ComfyAngel_SmartCompositeXY",
-            "ComfyAngel_SmartCompositeAlign"
-        ];
-
-        if (!supportedNodes.includes(nodeData.name)) {
+        // Support SmartCompositeXY only
+        if (nodeData.name !== "ComfyAngel_SmartCompositeXY") {
             return;
         }
-
-        const isAlignMode = nodeData.name === "ComfyAngel_SmartCompositeAlign";
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const result = onNodeCreated?.apply(this, arguments);
 
-            // Store mode on node instance
-            this.compositeMode = isAlignMode ? "align" : "xy";
-
-            // Find appropriate widgets based on mode
-            let widgets = {};
-            if (isAlignMode) {
-                widgets = {
-                    alignment: this.widgets.find(w => w.name === "alignment"),
-                    margin_x: this.widgets.find(w => w.name === "margin_x"),
-                    margin_y: this.widgets.find(w => w.name === "margin_y"),
-                    scale: this.widgets.find(w => w.name === "scale_percent" || w.name === "scale"),
-                    blend_mode: this.widgets.find(w => w.name === "blend_mode"),
-                    opacity: this.widgets.find(w => w.name === "opacity"),
-                };
-            } else {
-                widgets = {
-                    x: this.widgets.find(w => w.name === "x"),
-                    y: this.widgets.find(w => w.name === "y"),
-                    anchor: this.widgets.find(w => w.name === "anchor"),
-                    scale: this.widgets.find(w => w.name === "scale_percent" || w.name === "scale"),
-                    blend_mode: this.widgets.find(w => w.name === "blend_mode"),
-                    opacity: this.widgets.find(w => w.name === "opacity"),
-                };
-            }
+            // Find widgets
+            const widgets = {
+                x: this.widgets.find(w => w.name === "x"),
+                y: this.widgets.find(w => w.name === "y"),
+                anchor: this.widgets.find(w => w.name === "anchor"),
+                scale: this.widgets.find(w => w.name === "scale_percent" || w.name === "scale"),
+                blend_mode: this.widgets.find(w => w.name === "blend_mode"),
+                opacity: this.widgets.find(w => w.name === "opacity"),
+            };
 
             // Add position picker button
             const pickerWidget = this.addWidget("button", "Open Position Picker", null, () => {
@@ -58,22 +36,6 @@ app.registerExtension({
             pickerWidget.serialize = false;
 
             return result;
-        };
-
-        // Helper to calculate alignment position
-        nodeType.prototype.calcAlignmentPosition = function (alignment, canvasW, canvasH, overlayW, overlayH, marginX, marginY) {
-            const positions = {
-                "top_left": [marginX, marginY],
-                "top_center": [(canvasW - overlayW) / 2 + marginX, marginY],
-                "top_right": [canvasW - overlayW - marginX, marginY],
-                "middle_left": [marginX, (canvasH - overlayH) / 2 + marginY],
-                "center": [(canvasW - overlayW) / 2 + marginX, (canvasH - overlayH) / 2 + marginY],
-                "middle_right": [canvasW - overlayW - marginX, (canvasH - overlayH) / 2 + marginY],
-                "bottom_left": [marginX, canvasH - overlayH - marginY],
-                "bottom_center": [(canvasW - overlayW) / 2 + marginX, canvasH - overlayH - marginY],
-                "bottom_right": [canvasW - overlayW - marginX, canvasH - overlayH - marginY],
-            };
-            return positions[alignment] || [0, 0];
         };
 
         // Get connected image info (URL + size + color)
@@ -167,23 +129,14 @@ app.registerExtension({
         nodeType.prototype.showPositionPicker = function (widgets) {
             const canvasInfo = this.getConnectedImageInfo("canvas");
             const overlayInfo = this.getConnectedImageInfo("overlay");
-            const mode = this.compositeMode;
 
-            // Get current values based on mode
-            let currentX, currentY, currentAnchor, currentMarginX, currentMarginY, currentAlignment;
+            // Get current values
+            const currentX = widgets.x?.value || 0;
+            const currentY = widgets.y?.value || 0;
+            const currentAnchor = widgets.anchor?.value || "top_left";
             const currentScale = widgets.scale?.value || 100;
             const currentBlendMode = widgets.blend_mode?.value || "normal";
             const currentOpacity = widgets.opacity?.value || 100;
-
-            if (mode === "align") {
-                currentAlignment = widgets.alignment?.value || "center";
-                currentMarginX = widgets.margin_x?.value || 0;
-                currentMarginY = widgets.margin_y?.value || 0;
-            } else {
-                currentX = widgets.x?.value || 0;
-                currentY = widgets.y?.value || 0;
-                currentAnchor = widgets.anchor?.value || "top_left";
-            }
 
             // Default dimensions (will be updated from info or loaded images)
             let canvasWidth = canvasInfo.width || 512;
@@ -269,8 +222,7 @@ app.registerExtension({
                     canvasInfo, overlayInfo,
                     canvasWidth, canvasHeight,
                     overlayWidth, overlayHeight,
-                    mode,
-                    { currentX, currentY, currentAnchor, currentMarginX, currentMarginY, currentAlignment, currentScale, currentBlendMode, currentOpacity },
+                    { currentX, currentY, currentAnchor, currentScale, currentBlendMode, currentOpacity },
                     widgets
                 );
             };
@@ -283,7 +235,6 @@ app.registerExtension({
             canvasInfo, overlayInfo,
             canvasWidth, canvasHeight,
             overlayWidth, overlayHeight,
-            mode,
             currentValues,
             widgets
         ) {
@@ -291,7 +242,7 @@ app.registerExtension({
             const canvasUrl = typeof canvasInfo === 'string' ? canvasInfo : canvasInfo.url;
             const canvasColor = typeof canvasInfo === 'object' ? canvasInfo.color : null;
             const overlayUrl = typeof overlayInfo === 'string' ? overlayInfo : overlayInfo.url;
-            const { currentX, currentY, currentAnchor, currentMarginX, currentMarginY, currentAlignment, currentScale, currentBlendMode, currentOpacity } = currentValues;
+            const { currentX, currentY, currentAnchor, currentScale, currentBlendMode, currentOpacity } = currentValues;
 
             // Calculate preview scale
             const maxPreviewSize = 400;
@@ -303,52 +254,12 @@ app.registerExtension({
             const scaledOverlayW = Math.floor(overlayWidth * (currentScale / 100) * scale);
             const scaledOverlayH = Math.floor(overlayHeight * (currentScale / 100) * scale);
 
-            // Calculate initial position based on mode
-            let initialX, initialY;
-            if (mode === "align") {
-                // Calculate position from alignment
-                const pos = this.calcAlignmentPosition(
-                    currentAlignment, canvasWidth, canvasHeight,
-                    overlayWidth * (currentScale / 100), overlayHeight * (currentScale / 100),
-                    currentMarginX, currentMarginY
-                );
-                initialX = pos[0];
-                initialY = pos[1];
-            } else {
-                initialX = currentX;
-                initialY = currentY;
-            }
+            // Initial position
+            const initialX = currentX;
+            const initialY = currentY;
 
-            // Generate controls HTML based on mode
-            const controlsHTML = mode === "align" ? `
-                <div style="margin-bottom: 15px;">
-                    <div style="color: #aaa; margin-bottom: 8px;">Alignment:</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
-                        <button class="align-btn" data-align="top_left" style="padding: 8px; background: ${currentAlignment === "top_left" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "top_left" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "top_left" ? "bold" : "normal"};">TL</button>
-                        <button class="align-btn" data-align="top_center" style="padding: 8px; background: ${currentAlignment === "top_center" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "top_center" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "top_center" ? "bold" : "normal"};">TC</button>
-                        <button class="align-btn" data-align="top_right" style="padding: 8px; background: ${currentAlignment === "top_right" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "top_right" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "top_right" ? "bold" : "normal"};">TR</button>
-                        <button class="align-btn" data-align="middle_left" style="padding: 8px; background: ${currentAlignment === "middle_left" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "middle_left" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "middle_left" ? "bold" : "normal"};">ML</button>
-                        <button class="align-btn" data-align="center" style="padding: 8px; background: ${currentAlignment === "center" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "center" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "center" ? "bold" : "normal"};">C</button>
-                        <button class="align-btn" data-align="middle_right" style="padding: 8px; background: ${currentAlignment === "middle_right" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "middle_right" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "middle_right" ? "bold" : "normal"};">MR</button>
-                        <button class="align-btn" data-align="bottom_left" style="padding: 8px; background: ${currentAlignment === "bottom_left" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "bottom_left" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "bottom_left" ? "bold" : "normal"};">BL</button>
-                        <button class="align-btn" data-align="bottom_center" style="padding: 8px; background: ${currentAlignment === "bottom_center" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "bottom_center" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "bottom_center" ? "bold" : "normal"};">BC</button>
-                        <button class="align-btn" data-align="bottom_right" style="padding: 8px; background: ${currentAlignment === "bottom_right" ? "#0af" : "#444"}; border: none; color: ${currentAlignment === "bottom_right" ? "#000" : "#fff"}; border-radius: 4px; cursor: pointer; font-weight: ${currentAlignment === "bottom_right" ? "bold" : "normal"};">BR</button>
-                    </div>
-                </div>
-
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-                    <label style="color: #aaa;">
-                        Margin X:
-                        <input type="number" id="position-margin-x" value="${currentMarginX}"
-                            style="width: 100%; background: #333; border: 1px solid #555; color: #fff; padding: 8px; border-radius: 4px; box-sizing: border-box;">
-                    </label>
-                    <label style="color: #aaa;">
-                        Margin Y:
-                        <input type="number" id="position-margin-y" value="${currentMarginY}"
-                            style="width: 100%; background: #333; border: 1px solid #555; color: #fff; padding: 8px; border-radius: 4px; box-sizing: border-box;">
-                    </label>
-                </div>
-            ` : `
+            // Controls HTML
+            const controlsHTML = `
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                     <label style="color: #aaa;">
                         X:
@@ -404,7 +315,7 @@ app.registerExtension({
 
             dialog.innerHTML = `
                 <div style="color: #fff; font-family: sans-serif;">
-                    <h3 style="margin: 0 0 15px 0;">Smart Composite - ${mode === "align" ? "Alignment" : "Position"} Picker</h3>
+                    <h3 style="margin: 0 0 15px 0;">Smart Composite - Position Picker</h3>
                     <div style="display: flex; gap: 20px;">
                         <div>
                             <div id="composite-canvas" style="
@@ -413,7 +324,7 @@ app.registerExtension({
                                 background: #333;
                                 border: 1px solid #555;
                                 position: relative;
-                                cursor: ${mode === "xy" ? "crosshair" : "default"};
+                                cursor: crosshair;
                                 overflow: hidden;
                             ">
                                 ${canvasUrl ? `<img src="${canvasUrl}" style="width: 100%; height: 100%; object-fit: fill; position: absolute; top: 0; left: 0;">` :
@@ -446,7 +357,6 @@ app.registerExtension({
                                     left: ${(initialX / canvasWidth) * previewWidth}px;
                                     top: ${(initialY / canvasHeight) * previewHeight}px;
                                 "></div>
-                                ${mode === "xy" ? `
                                 <div id="position-marker" style="
                                     position: absolute;
                                     width: 12px;
@@ -460,7 +370,6 @@ app.registerExtension({
                                     top: ${(initialY / canvasHeight) * previewHeight}px;
                                     z-index: 10;
                                 "></div>
-                                ` : ""}
                             </div>
                             <div style="margin-top: 10px; font-size: 12px; color: #888;">
                                 Canvas: ${canvasWidth}x${canvasHeight} | Overlay: ${overlayWidth}x${overlayHeight}
@@ -539,19 +448,12 @@ app.registerExtension({
             const opacitySlider = dialog.querySelector("#opacity-slider");
             const opacityValue = dialog.querySelector("#opacity-value");
 
-            // Get mode-specific elements
-            let xInput, yInput, anchorSelect, marginXInput, marginYInput, currentAlignmentValue;
-            if (mode === "align") {
-                marginXInput = dialog.querySelector("#position-margin-x");
-                marginYInput = dialog.querySelector("#position-margin-y");
-                currentAlignmentValue = currentAlignment;
-            } else {
-                xInput = dialog.querySelector("#position-x");
-                yInput = dialog.querySelector("#position-y");
-                anchorSelect = dialog.querySelector("#position-anchor");
-            }
+            // Get elements
+            const xInput = dialog.querySelector("#position-x");
+            const yInput = dialog.querySelector("#position-y");
+            const anchorSelect = dialog.querySelector("#position-anchor");
 
-            // Calculate anchor offset for overlay preview (XY mode)
+            // Calculate anchor offset for overlay preview
             const getAnchorOffset = (anchor, w, h) => {
                 const offsets = {
                     "top_left": [0, 0],
@@ -565,22 +467,6 @@ app.registerExtension({
                     "bottom_right": [-w, -h],
                 };
                 return offsets[anchor] || [0, 0];
-            };
-
-            // Calculate position from alignment (Align mode)
-            const calcAlignmentPosition = (alignment, canvasW, canvasH, overlayW, overlayH, marginX, marginY) => {
-                const positions = {
-                    "top_left": [marginX, marginY],
-                    "top_center": [(canvasW - overlayW) / 2 + marginX, marginY],
-                    "top_right": [canvasW - overlayW - marginX, marginY],
-                    "middle_left": [marginX, (canvasH - overlayH) / 2 + marginY],
-                    "center": [(canvasW - overlayW) / 2 + marginX, (canvasH - overlayH) / 2 + marginY],
-                    "middle_right": [canvasW - overlayW - marginX, (canvasH - overlayH) / 2 + marginY],
-                    "bottom_left": [marginX, canvasH - overlayH - marginY],
-                    "bottom_center": [(canvasW - overlayW) / 2 + marginX, canvasH - overlayH - marginY],
-                    "bottom_right": [canvasW - overlayW - marginX, canvasH - overlayH - marginY],
-                };
-                return positions[alignment] || [0, 0];
             };
 
             // Blend mode CSS mapping
@@ -619,50 +505,26 @@ app.registerExtension({
                 overlayPreview.style.width = `${scaledW}px`;
                 overlayPreview.style.height = `${scaledH}px`;
 
-                let x, y;
+                const x = parseInt(xInput.value) || 0;
+                const y = parseInt(yInput.value) || 0;
+                const anchor = anchorSelect.value;
 
-                if (mode === "align") {
-                    // Calculate position from alignment
-                    const marginX = parseInt(marginXInput.value) || 0;
-                    const marginY = parseInt(marginYInput.value) || 0;
-                    const actualOverlayW = overlayWidth * (scalePercent / 100);
-                    const actualOverlayH = overlayHeight * (scalePercent / 100);
-                    [x, y] = calcAlignmentPosition(
-                        currentAlignmentValue,
-                        canvasWidth, canvasHeight,
-                        actualOverlayW, actualOverlayH,
-                        marginX, marginY
-                    );
+                // Calculate position with anchor offset
+                const [ox, oy] = getAnchorOffset(anchor, scaledW, scaledH);
+                const previewX = (x / canvasWidth) * previewWidth + ox;
+                const previewY = (y / canvasHeight) * previewHeight + oy;
 
-                    // Position overlay (top-left corner)
-                    const previewX = (x / canvasWidth) * previewWidth;
-                    const previewY = (y / canvasHeight) * previewHeight;
-                    overlayPreview.style.left = `${previewX}px`;
-                    overlayPreview.style.top = `${previewY}px`;
-                } else {
-                    // XY mode
-                    x = parseInt(xInput.value) || 0;
-                    y = parseInt(yInput.value) || 0;
-                    const anchor = anchorSelect.value;
+                overlayPreview.style.left = `${previewX}px`;
+                overlayPreview.style.top = `${previewY}px`;
 
-                    // Calculate position with anchor offset
-                    const [ox, oy] = getAnchorOffset(anchor, scaledW, scaledH);
-                    const previewX = (x / canvasWidth) * previewWidth + ox;
-                    const previewY = (y / canvasHeight) * previewHeight + oy;
-
-                    overlayPreview.style.left = `${previewX}px`;
-                    overlayPreview.style.top = `${previewY}px`;
-
-                    // Update marker
-                    marker.style.left = `${(x / canvasWidth) * previewWidth}px`;
-                    marker.style.top = `${(y / canvasHeight) * previewHeight}px`;
-                }
+                // Update marker
+                marker.style.left = `${(x / canvasWidth) * previewWidth}px`;
+                marker.style.top = `${(y / canvasHeight) * previewHeight}px`;
             };
 
-            // Freestyle button and style helper (XY mode only, but declared outside for scope)
-            const freestyleBtn = mode === "xy" ? dialog.querySelector("#freestyle-btn") : null;
+            // Freestyle button and style helper
+            const freestyleBtn = dialog.querySelector("#freestyle-btn");
             const updateQuickPosStyles = (activeBtn) => {
-                if (mode !== "xy" || !freestyleBtn) return;
                 dialog.querySelectorAll(".quick-pos").forEach(b => {
                     b.style.background = "#444";
                     b.style.color = "#fff";
@@ -683,69 +545,44 @@ app.registerExtension({
                 }
             };
 
-            // Handle canvas click (XY mode only)
-            if (mode === "xy") {
-                canvas.addEventListener("click", (e) => {
-                    // Ignore clicks on overlay (those are for dragging)
-                    if (e.target === overlayPreview) return;
+            // Handle canvas click
+            canvas.addEventListener("click", (e) => {
+                // Ignore clicks on overlay (those are for dragging)
+                if (e.target === overlayPreview) return;
 
-                    const rect = canvas.getBoundingClientRect();
-                    const clickX = e.clientX - rect.left;
-                    const clickY = e.clientY - rect.top;
+                const rect = canvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
 
-                    const x = Math.round((clickX / previewWidth) * canvasWidth);
-                    const y = Math.round((clickY / previewHeight) * canvasHeight);
+                const x = Math.round((clickX / previewWidth) * canvasWidth);
+                const y = Math.round((clickY / previewHeight) * canvasHeight);
 
-                    xInput.value = x;
-                    yInput.value = y;
-                    updateQuickPosStyles(null); // Switch to freestyle
+                xInput.value = x;
+                yInput.value = y;
+                updateQuickPosStyles(null); // Switch to freestyle
+                updatePreview();
+            });
+
+            // Handle input changes
+            xInput.addEventListener("input", updatePreview);
+            yInput.addEventListener("input", updatePreview);
+            anchorSelect.addEventListener("change", updatePreview);
+
+            // Handle quick position buttons
+            dialog.querySelectorAll(".quick-pos").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    xInput.value = btn.dataset.x;
+                    yInput.value = btn.dataset.y;
+                    anchorSelect.value = btn.dataset.anchor;
+                    updateQuickPosStyles(btn);
                     updatePreview();
                 });
+            });
 
-                // Handle input changes (XY mode)
-                xInput.addEventListener("input", updatePreview);
-                yInput.addEventListener("input", updatePreview);
-                anchorSelect.addEventListener("change", updatePreview);
-
-                // Handle quick position buttons (XY mode)
-                dialog.querySelectorAll(".quick-pos").forEach(btn => {
-                    btn.addEventListener("click", () => {
-                        xInput.value = btn.dataset.x;
-                        yInput.value = btn.dataset.y;
-                        anchorSelect.value = btn.dataset.anchor;
-                        updateQuickPosStyles(btn);
-                        updatePreview();
-                    });
-                });
-
-                // Handle freestyle button
-                freestyleBtn.addEventListener("click", () => {
-                    updateQuickPosStyles(null); // Switch to freestyle mode
-                });
-            } else {
-                // Handle alignment buttons (Align mode)
-                dialog.querySelectorAll(".align-btn").forEach(btn => {
-                    btn.addEventListener("click", () => {
-                        // Update button styles
-                        dialog.querySelectorAll(".align-btn").forEach(b => {
-                            b.style.background = "#444";
-                            b.style.color = "#fff";
-                            b.style.fontWeight = "normal";
-                        });
-                        btn.style.background = "#0af";
-                        btn.style.color = "#000";
-                        btn.style.fontWeight = "bold";
-
-                        // Update alignment value
-                        currentAlignmentValue = btn.dataset.align;
-                        updatePreview();
-                    });
-                });
-
-                // Handle margin inputs (Align mode)
-                marginXInput.addEventListener("input", updatePreview);
-                marginYInput.addEventListener("input", updatePreview);
-            }
+            // Handle freestyle button
+            freestyleBtn.addEventListener("click", () => {
+                updateQuickPosStyles(null); // Switch to freestyle mode
+            });
 
             // Handle scale input (both modes)
             scaleInput.addEventListener("input", updatePreview);
@@ -765,9 +602,8 @@ app.registerExtension({
                 document.body.removeChild(dialog);
             };
 
-            // Drag functionality for overlay preview (XY mode only)
-            if (mode === "xy") {
-                let isDragging = false;
+            // Drag functionality for overlay preview
+            let isDragging = false;
                 let startX, startY, startLeft, startTop;
 
                 overlayPreview.style.cursor = "move";
@@ -839,25 +675,15 @@ app.registerExtension({
                     document.removeEventListener("mousemove", handleMouseMove);
                     document.removeEventListener("mouseup", handleMouseUp);
                 };
-            }
 
             dialog.querySelector("#position-cancel").onclick = closeDialog;
             bgOverlay.onclick = closeDialog;
 
             dialog.querySelector("#position-apply").onclick = () => {
-                if (mode === "align") {
-                    if (widgets.alignment) widgets.alignment.value = currentAlignmentValue;
-                    if (widgets.margin_x) widgets.margin_x.value = parseInt(marginXInput.value) || 0;
-                    if (widgets.margin_y) widgets.margin_y.value = parseInt(marginYInput.value) || 0;
-                    if (widgets.scale) widgets.scale.value = parseInt(scaleInput.value) || 100;
-                } else {
-                    if (widgets.x) widgets.x.value = parseInt(xInput.value) || 0;
-                    if (widgets.y) widgets.y.value = parseInt(yInput.value) || 0;
-                    if (widgets.anchor) widgets.anchor.value = anchorSelect.value;
-                    if (widgets.scale) widgets.scale.value = parseInt(scaleInput.value) || 100;
-                }
-
-                // Apply blend mode and opacity (both modes)
+                if (widgets.x) widgets.x.value = parseInt(xInput.value) || 0;
+                if (widgets.y) widgets.y.value = parseInt(yInput.value) || 0;
+                if (widgets.anchor) widgets.anchor.value = anchorSelect.value;
+                if (widgets.scale) widgets.scale.value = parseInt(scaleInput.value) || 100;
                 if (widgets.blend_mode) widgets.blend_mode.value = blendModeSelect.value;
                 if (widgets.opacity) widgets.opacity.value = parseInt(opacitySlider.value) || 100;
 

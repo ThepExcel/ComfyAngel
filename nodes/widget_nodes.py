@@ -534,143 +534,6 @@ class SmartCompositeXY(_CompositeBase):
         return x + ox, y + oy
 
 
-class SmartCompositeAlign(_CompositeBase):
-    """
-    Composite two images using alignment.
-
-    Place an overlay image on a canvas at aligned position
-    (center, corners, edges) with margin, scale, blend mode, and opacity.
-    """
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "canvas": ("IMAGE",),
-                "overlay": ("IMAGE",),
-                "alignment": (cls.ANCHORS, {"default": "center"}),
-                "margin_x": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
-                "margin_y": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
-                "scale_percent": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 500.0, "step": 1.0}),
-                "blend_mode": (cls.BLEND_MODES, {"default": "normal"}),
-                "opacity": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 100.0, "step": 1.0}),
-            },
-            "optional": {
-                "mask": ("MASK",),
-            },
-        }
-
-    RETURN_TYPES = ("IMAGE", "INT", "INT")
-    RETURN_NAMES = ("image", "x", "y")
-    FUNCTION = "composite"
-    CATEGORY = "ComfyAngel/Composite"
-
-    def composite(
-        self,
-        canvas,
-        overlay,
-        alignment: str,
-        margin_x: int,
-        margin_y: int,
-        scale_percent: float,
-        blend_mode: str,
-        opacity: float,
-        mask=None,
-    ):
-        canvas = ensure_bhwc(canvas)
-        overlay = ensure_bhwc(overlay)
-
-        result = clone_tensor(canvas)
-        batch_size = canvas.shape[0]
-        overlay_batch = overlay.shape[0]
-        canvas_h, canvas_w = canvas.shape[1], canvas.shape[2]
-
-        results = []
-
-        with torch.no_grad():
-            for i in range(batch_size):
-                canvas_img = to_pil(result, i)
-                overlay_idx = min(i, overlay_batch - 1)
-                overlay_img = to_pil(overlay, overlay_idx)
-
-                # Scale overlay
-                overlay_img = self._scale_overlay(overlay_img, scale_percent)
-
-                # Apply mask if provided
-                if mask is not None:
-                    # Ensure mask is 3D [B, H, W]
-                    if mask.dim() == 2:
-                        mask = mask.unsqueeze(0)
-
-                    mask_idx = min(i, mask.shape[0] - 1)
-                    mask_tensor = mask[mask_idx]
-
-                    # Get mask dimensions (before scaling)
-                    original_overlay = to_pil(overlay, overlay_idx)
-                    mask_h, mask_w = mask_tensor.shape
-
-                    # Resize mask to match scaled overlay dimensions
-                    scaled_w = overlay_img.width
-                    scaled_h = overlay_img.height
-
-                    # Convert mask tensor to PIL for resizing
-                    mask_np = (mask_tensor.cpu().numpy() * 255).astype(np.uint8)
-                    mask_img = Image.fromarray(mask_np, mode="L")
-
-                    # Resize mask to match original overlay size if needed
-                    if mask_img.size != original_overlay.size:
-                        mask_img = mask_img.resize(original_overlay.size, Image.LANCZOS)
-
-                    # Then resize to scaled overlay size
-                    if mask_img.size != (scaled_w, scaled_h):
-                        mask_img = mask_img.resize((scaled_w, scaled_h), Image.LANCZOS)
-
-                    # Apply mask as alpha channel
-                    if overlay_img.mode != "RGBA":
-                        overlay_img = overlay_img.convert("RGBA")
-
-                    # Multiply existing alpha with mask
-                    r, g, b, a = overlay_img.split()
-                    # Mask is 0-1 where 1=keep, 0=discard
-                    # PIL alpha is 0=transparent, 255=opaque
-                    # ComfyUI MASK is 0=masked, 1=unmasked
-                    overlay_img = Image.merge("RGBA", (r, g, b, mask_img))
-
-                # Calculate position based on alignment
-                pos_x, pos_y = self._calc_alignment_position(
-                    alignment, canvas_w, canvas_h,
-                    overlay_img.width, overlay_img.height,
-                    margin_x, margin_y
-                )
-
-                # Apply blend mode and composite
-                composited = self._blend_images(
-                    canvas_img, overlay_img, pos_x, pos_y, blend_mode, opacity / 100.0
-                )
-
-                results.append(from_pil(composited))
-
-        return (torch.cat(results, dim=0), pos_x, pos_y)
-
-    def _calc_alignment_position(
-        self, alignment: str, canvas_w: int, canvas_h: int,
-        overlay_w: int, overlay_h: int, margin_x: int, margin_y: int
-    ):
-        """Calculate top-left position based on alignment."""
-        positions = {
-            "top_left": (margin_x, margin_y),
-            "top_center": ((canvas_w - overlay_w) // 2 + margin_x, margin_y),
-            "top_right": (canvas_w - overlay_w - margin_x, margin_y),
-            "middle_left": (margin_x, (canvas_h - overlay_h) // 2 + margin_y),
-            "center": ((canvas_w - overlay_w) // 2 + margin_x, (canvas_h - overlay_h) // 2 + margin_y),
-            "middle_right": (canvas_w - overlay_w - margin_x, (canvas_h - overlay_h) // 2 + margin_y),
-            "bottom_left": (margin_x, canvas_h - overlay_h - margin_y),
-            "bottom_center": ((canvas_w - overlay_w) // 2 + margin_x, canvas_h - overlay_h - margin_y),
-            "bottom_right": (canvas_w - overlay_w - margin_x, canvas_h - overlay_h - margin_y),
-        }
-        return positions.get(alignment, (0, 0))
-
-
 class ColorPicker:
     """
     Pick a color with visual color picker.
@@ -1356,7 +1219,6 @@ NODE_CLASS_MAPPINGS = {
     "ComfyAngel_SmartCrop": SmartCrop,
     "ComfyAngel_SolidColor": SolidColor,
     "ComfyAngel_SmartCompositeXY": SmartCompositeXY,
-    "ComfyAngel_SmartCompositeAlign": SmartCompositeAlign,
     "ComfyAngel_ColorPicker": ColorPicker,
     "ComfyAngel_ImageInfo": ImageInfo,
     "ComfyAngel_ResolutionPicker": ResolutionPicker,
@@ -1369,8 +1231,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyAngel_SmartCrop": "Smart Crop 🪽",
     "ComfyAngel_SolidColor": "Solid Color 🪽",
-    "ComfyAngel_SmartCompositeXY": "Smart Composite XY 🪽",
-    "ComfyAngel_SmartCompositeAlign": "Smart Composite Align 🪽",
+    "ComfyAngel_SmartCompositeXY": "Smart Composite 🪽",
     "ComfyAngel_ColorPicker": "Color Picker 🪽",
     "ComfyAngel_ImageInfo": "Image Info 🪽",
     "ComfyAngel_ResolutionPicker": "Resolution Picker 🪽",
