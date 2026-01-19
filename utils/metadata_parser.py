@@ -204,7 +204,6 @@ def parse_comfyui_format(prompt_json: str, workflow_json: Optional[str] = None) 
                     model_name = re.sub(r"\.(safetensors|ckpt|gguf|bin|pt|pth)$", "", model_name, flags=re.IGNORECASE)
                     if model_name and not params.model:
                         params.model = model_name
-                        print(f"[ComfyAngel] Parser found model: {model_name} from {class_type}.{field}")
                     break
 
         # LoraLoader
@@ -239,7 +238,6 @@ def parse_comfyui_format(prompt_json: str, workflow_json: Optional[str] = None) 
                 # For now, assume first CLIPTextEncode is positive
                 if params.positive_prompt is None or len(text) > len(params.positive_prompt):
                     params.positive_prompt = text
-                    print(f"[ComfyAngel] Parser found prompt from CLIPTextEncode: {text[:50]}...")
 
         # Smart prompt detection - search all string fields
         for field_name, field_value in inputs.items():
@@ -265,8 +263,6 @@ def parse_comfyui_format(prompt_json: str, workflow_json: Optional[str] = None) 
             )
 
             if looks_like_prompt:
-                print(f"[ComfyAngel] Parser found potential prompt: field={field_name}, text={field_value[:50]}...")
-
                 # Determine if positive or negative
                 is_negative = (
                     "negative" in field_name.lower() or

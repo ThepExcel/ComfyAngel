@@ -245,45 +245,49 @@ Advanced version that accumulates up to 10 separate result streams.
 
 ### Loader Nodes
 
-#### Load All Images from Folder 🪽
+#### Load Images Batch from Folder 🪽
 
-Load ALL images from a folder as a single batch tensor.
+Load images from a folder with optional resize modes.
 
 **How it works:**
 1. Scans the specified folder for image files
-2. Loads all images and resizes them to match the first image's dimensions
-3. Stacks them into a batch tensor (B, H, W, C)
+2. Optionally resizes images (or keeps original sizes)
+3. Returns as a list of images for loop processing
 
 | Input | Type | Description |
 |-------|------|-------------|
-| folder_path | STRING | Absolute or relative path to folder containing images. Example: `C:/images` or `/home/user/photos` |
-| sort_by | ENUM | How to order the images: `name` (alphabetical), `modified_date` (newest first), `created_date` |
-| max_images | INT | Maximum number of images to load. Set to `0` for unlimited. Default: 0 |
-| start_index | INT | Skip the first N images. Useful for pagination. Default: 0 |
-| include_subdirs | BOOLEAN | If true, also scans subfolders recursively. Default: false |
+| folder_path | STRING | Path to folder. Use **Browse Folder** button for native OS folder picker. |
+| sort_by | ENUM | How to order: `name`, `modified_date`, `created_date` |
+| max_images | INT | Maximum images to load. `0` = unlimited. Default: 0 |
+| start_index | INT | Skip first N images. Default: 0 |
+| include_subdirs | BOOLEAN | Scan subfolders recursively. Default: false |
+| resize_mode | ENUM | `disabled` (keep original sizes), `resize_to_first`, `resize_to_largest`, `resize_to_smallest` |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| images | IMAGE | Batch tensor containing all loaded images. Shape: (N, H, W, 3) |
-| filenames | STRING | Newline-separated list of loaded filenames (without path). |
-| count | INT | Number of images successfully loaded. |
+| images | IMAGE[] | **List** of images (supports different sizes when `resize_mode: disabled`). |
+| filenames | STRING | Newline-separated list of loaded filenames. |
+| count | INT | Number of images loaded. |
 
 **Supported formats:** PNG, JPG, JPEG, WEBP, BMP, GIF
 
-**Important notes:**
-- All images are resized to match the **first image's dimensions** (maintains batch consistency)
-- Large folders with many high-resolution images may use significant memory
-- Use `max_images` and `start_index` to process in smaller batches if needed
+**Resize modes:**
+- `disabled` — Keep original sizes. Use with Loop nodes to process each image separately.
+- `resize_to_first` — All images resized to match first image's dimensions.
+- `resize_to_largest` — All images resized to largest width × largest height found.
+- `resize_to_smallest` — All images resized to smallest dimensions found.
+
+**Browse Folder button:** Opens native OS folder picker (no "upload files" warning).
 
 **Use with Loop:**
 ```
-[Load All Images from Folder] → images (batch of N images)
+[Load Images Batch from Folder] → images (list)
          ↓
 [Loop Start] → item (single image per iteration)
          ↓
 [Process Image] → processed
          ↓
-[Loop End] → results (batch of N processed images)
+[Loop End] → results
 ```
 
 ---
@@ -424,6 +428,67 @@ Output: "masterpiece, best quality, 1girl, blonde hair, detailed background"
 ```
 
 **Note:** Empty inputs are skipped (no double separators).
+
+---
+
+#### JSON Extract 🪽
+
+Extract values from JSON using field paths. Perfect for parsing metadata or API responses.
+
+**How it works:**
+1. Parse JSON string input
+2. Extract values at specified field paths
+3. Return as list (for loops) and joined string
+
+| Input | Type | Description |
+|-------|------|-------------|
+| json_string | STRING | JSON text to parse. Connect from metadata or paste directly. |
+| fields | STRING | Field paths, one per line (or use custom delimiter). |
+| delimiter | ENUM | How fields are separated: `newline`, `comma`, `pipe`, `semicolon` |
+| output_delimiter | ENUM | How to join output values. |
+| default_value | STRING | Value when field not found. Default: empty string |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| values | STRING[] | List of extracted values. Use with Loop nodes. |
+| values_joined | STRING | All values joined with output_delimiter. |
+| count | INT | Number of fields extracted. |
+
+**Field path syntax:**
+```
+seed                    → json["seed"]
+3.inputs.steps          → json["3"]["inputs"]["steps"]
+nodes[0].type           → json["nodes"][0]["type"]
+workflow.nodes[2].title → json["workflow"]["nodes"][2]["title"]
+```
+
+**Browse JSON Fields button:** Opens visual JSON tree viewer. Click any field to add its path to the fields list.
+
+![JSON Extract Browser](assets/json-extract-browser.png)
+
+**Example - Extract from ComfyUI metadata:**
+```json
+{"3": {"inputs": {"seed": 12345, "steps": 30, "cfg": 7.5}}}
+```
+```
+Fields:
+3.inputs.seed
+3.inputs.steps
+3.inputs.cfg
+
+Output:
+values = ["12345", "30", "7.5"]
+values_joined = "12345\n30\n7.5"
+```
+
+**Use with Loop:**
+```
+[Load Image + Metadata] → metadata_raw
+         ↓
+[JSON Extract] fields: "3.inputs.seed" → values (list)
+         ↓
+[Loop Start] → item (one seed per iteration)
+```
 
 ---
 
@@ -619,13 +684,13 @@ Get dimensions and batch information from an image tensor.
 
 ### Composite Nodes
 
-#### Smart Composite XY 🪽
+#### Smart Composite 🪽
 
-Composite (layer) an overlay image onto a canvas at specific X,Y coordinates.
+Composite (layer) an overlay image onto a canvas with visual drag-and-drop positioning.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| canvas | IMAGE | Background image. |
+| canvas | IMAGE | Background image (connect to Image Bridge first for preview). |
 | overlay | IMAGE | Image to place on top. Can have transparency. |
 | x | INT | Horizontal position. Range: -8192 to 8192 |
 | y | INT | Vertical position. Range: -8192 to 8192 |
@@ -637,38 +702,24 @@ Composite (layer) an overlay image onto a canvas at specific X,Y coordinates.
 | Output | Type | Description |
 |--------|------|-------------|
 | image | IMAGE | Composited result. |
+| x | INT | Final X position (useful for saving position). |
+| y | INT | Final Y position. |
+
+**Visual Editor Features:**
+- **Drag overlay** directly on preview image
+- **Quick position buttons** for common placements (corners, center, edges)
+- **Freestyle mode** for free dragging (auto-activates when dragging)
+- **Scale slider** with live preview
+- **Blend mode preview** in widget
 
 **Anchor examples:**
 - `anchor: top_left, x: 10, y: 10` → Overlay's top-left corner at (10, 10)
 - `anchor: center, x: 256, y: 256` → Overlay centered at (256, 256)
-- `anchor: bottom_right, x: 500, y: 500` → Overlay's bottom-right corner at (500, 500)
 
----
-
-#### Smart Composite Align 🪽
-
-Composite an overlay image using alignment presets instead of coordinates.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| canvas | IMAGE | Background image. |
-| overlay | IMAGE | Image to place on top. |
-| alignment | ENUM | Position preset: `top_left`, `top_center`, `top_right`, `center_left`, `center`, `center_right`, `bottom_left`, `bottom_center`, `bottom_right` |
-| margin_x | INT | Horizontal offset from alignment position. Positive = right, negative = left. |
-| margin_y | INT | Vertical offset from alignment position. Positive = down, negative = up. |
-| scale | FLOAT | Resize overlay 1-500%. |
-| blend_mode | ENUM | Blend mode (same options as Smart Composite XY). |
-| opacity | FLOAT | Overlay opacity 0-100%. |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| image | IMAGE | Composited result. |
-
-**Example - Watermark in bottom-right:**
+**Workflow tip:** Connect canvas through **Image Bridge** first to enable the visual preview:
 ```
-alignment: bottom_right
-margin_x: -20  (20px from right edge)
-margin_y: -20  (20px from bottom edge)
+[Load Image] → [Image Bridge] → canvas [Smart Composite]
+                                overlay ← [Load Logo]
 ```
 
 ---

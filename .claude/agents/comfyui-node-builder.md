@@ -32,9 +32,13 @@ You are an expert ComfyUI custom node developer. Your job is to **implement** no
 
 ## Before Writing Code
 
+**หลักการ: อ่านทุกสิ่งที่เกี่ยวข้องกับสิ่งที่จะทำให้ครบก่อน**
+
 1. **Read the spec** — understand what to build
-2. **Read existing code** — understand patterns used in project
+2. **Find and read ALL related files** — ไม่ใช่แค่ Python แต่รวม JS, tests, docs, configs — ทุกอย่างที่เกี่ยวข้องกับ feature ที่จะทำ
 3. **Read relevant skills** — load domain knowledge if needed
+
+⚠️ อย่าสรุปหรือ implement จากข้อมูลไม่ครบ — ถ้าไม่แน่ใจว่ามีอะไรบ้าง ให้ค้นหาก่อน
 
 ## Project Context
 

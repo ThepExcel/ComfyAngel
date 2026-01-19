@@ -13,6 +13,7 @@ from PIL import Image, ImageOps, ImageSequence
 from ..utils.tensor_ops import ensure_bhwc, to_pil, from_pil, clone_tensor
 from ..utils.metadata_parser import read_image_metadata, GenerationParams, parse_a1111_format, parse_comfyui_format
 from ..utils.text_renderer import TextRenderer
+from ..utils.color_utils import hex_to_rgb
 
 # Try to import folder_paths from ComfyUI
 try:
@@ -69,15 +70,9 @@ class LoadImageWithMetadata:
 
         # Parse metadata
         params = read_image_metadata(image_path)
-        print(f"[ComfyAngel] LoadImageWithMetadata: raw_metadata length = {len(raw_metadata)}")
-        print(f"[ComfyAngel] LoadImageWithMetadata: params.seed = {params.seed}")
-        print(f"[ComfyAngel] LoadImageWithMetadata: params.model = {params.model}")
-        print(f"[ComfyAngel] LoadImageWithMetadata: params.steps = {params.steps}")
-        print(f"[ComfyAngel] LoadImageWithMetadata: params.positive_prompt = {params.positive_prompt[:100] if params.positive_prompt else None}...")
-        print(f"[ComfyAngel] LoadImageWithMetadata: params.negative_prompt = {params.negative_prompt[:100] if params.negative_prompt else None}...")
+        # Debug prints removed for production
 
         overlay_lines = params.format_overlay(show_prompt=True, max_prompt_len=200)
-        print(f"[ComfyAngel] LoadImageWithMetadata: overlay_lines = {overlay_lines}")
 
         if overlay_lines:
             formatted_metadata = "\n".join(overlay_lines)
@@ -202,15 +197,17 @@ class ParameterOverlay:
                 "image": ("IMAGE",),
             },
             "optional": {
-                "image_path": ("STRING", {
+                "source_image_path": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "Path to image with metadata (optional)"
+                    "placeholder": "Path to image file (for metadata extraction)",
+                    "tooltip": "If provided, metadata will be read from this image file"
                 }),
-                "metadata_text": ("STRING", {
+                "custom_metadata": ("STRING", {
                     "default": "",
                     "multiline": True,
-                    "placeholder": "Or paste raw metadata here"
+                    "placeholder": "Or paste raw metadata here (overrides image_path)",
+                    "tooltip": "Paste A1111 or ComfyUI metadata text directly. Takes priority over image_path."
                 }),
                 "position": (["bottom_extend", "bottom_inside", "top_inside"],),
                 "font_size": ("INT", {"default": 25, "min": 8, "max": 100, "step": 1}),
@@ -228,8 +225,8 @@ class ParameterOverlay:
     def add_overlay(
         self,
         image,
-        image_path: str = "",
-        metadata_text: str = "",
+        source_image_path: str = "",
+        custom_metadata: str = "",
         position: str = "bottom_extend",
         font_size: int = 25,
         bg_opacity: float = 0.7,
@@ -242,14 +239,14 @@ class ParameterOverlay:
 
         # Parse metadata
         params = GenerationParams()
-        if metadata_text.strip():
-            # Try to parse provided metadata
-            if "Steps:" in metadata_text:
-                params = parse_a1111_format(metadata_text)
-            elif metadata_text.strip().startswith("{"):
-                params = parse_comfyui_format(metadata_text)
-        elif image_path and os.path.exists(image_path):
-            params = read_image_metadata(image_path)
+        if custom_metadata.strip():
+            # Try to parse provided metadata (takes priority)
+            if "Steps:" in custom_metadata:
+                params = parse_a1111_format(custom_metadata)
+            elif custom_metadata.strip().startswith("{"):
+                params = parse_comfyui_format(custom_metadata)
+        elif source_image_path and os.path.exists(source_image_path):
+            params = read_image_metadata(source_image_path)
 
         # Get overlay lines
         # max_prompt_length: 0 = unlimited
@@ -267,19 +264,20 @@ class ParameterOverlay:
         )
 
         # Process each image in batch
-        for i in range(batch_size):
-            pil_img = to_pil(image, i)
+        with torch.no_grad():
+            for i in range(batch_size):
+                pil_img = to_pil(image, i)
 
-            if position == "bottom_extend":
-                result = renderer.add_overlay_bottom(pil_img, lines)
-            elif position == "bottom_inside":
-                result = renderer.add_overlay_inside(pil_img, lines, "bottom")
-            else:  # top_inside
-                result = renderer.add_overlay_inside(pil_img, lines, "top")
+                if position == "bottom_extend":
+                    result = renderer.add_overlay_bottom(pil_img, lines)
+                elif position == "bottom_inside":
+                    result = renderer.add_overlay_inside(pil_img, lines, "bottom")
+                else:  # top_inside
+                    result = renderer.add_overlay_inside(pil_img, lines, "top")
 
-            results.append(from_pil(result))
+                results.append(from_pil(result))
 
-        return (torch.cat(results, dim=0),)
+            return (torch.cat(results, dim=0),)
 
 
 class CustomTextOverlay:
@@ -333,8 +331,8 @@ class CustomTextOverlay:
         results = []
 
         # Parse colors
-        text_rgb = self._hex_to_rgb(text_color)
-        bg_rgb = self._hex_to_rgb(bg_color)
+        text_rgb = hex_to_rgb(text_color, default=(255, 255, 255))
+        bg_rgb = hex_to_rgb(bg_color, default=(0, 0, 0))
 
         # Split text into lines
         lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
@@ -351,29 +349,20 @@ class CustomTextOverlay:
         )
 
         # Process each image in batch
-        for i in range(batch_size):
-            pil_img = to_pil(image, i)
+        with torch.no_grad():
+            for i in range(batch_size):
+                pil_img = to_pil(image, i)
 
-            if position == "bottom_extend":
-                result = renderer.add_overlay_bottom(pil_img, lines)
-            elif position == "bottom_inside":
-                result = renderer.add_overlay_inside(pil_img, lines, "bottom")
-            else:  # top_inside
-                result = renderer.add_overlay_inside(pil_img, lines, "top")
+                if position == "bottom_extend":
+                    result = renderer.add_overlay_bottom(pil_img, lines)
+                elif position == "bottom_inside":
+                    result = renderer.add_overlay_inside(pil_img, lines, "bottom")
+                else:  # top_inside
+                    result = renderer.add_overlay_inside(pil_img, lines, "top")
 
-            results.append(from_pil(result))
+                results.append(from_pil(result))
 
-        return (torch.cat(results, dim=0),)
-
-    def _hex_to_rgb(self, hex_color: str) -> tuple:
-        """Convert hex color to RGB tuple."""
-        hex_color = hex_color.lstrip("#")
-        if len(hex_color) == 3:
-            hex_color = "".join([c * 2 for c in hex_color])
-        try:
-            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        except ValueError:
-            return (255, 255, 255)
+            return (torch.cat(results, dim=0),)
 
 
 # Export for registration

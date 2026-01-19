@@ -34,6 +34,43 @@ app.registerExtension({
             });
             cropWidget.serialize = false;
 
+            // Add inline color preview for bg_color
+            if (bgColorWidget) {
+                const colorPreviewWidget = this.addCustomWidget({
+                    name: "bg_color_preview",
+                    type: "bg_color_preview",
+                    draw: function(ctx, node, width, y, height) {
+                        const color = bgColorWidget?.value || "#000000";
+                        const margin = 15;
+                        const swatchSize = 24;
+                        const label = "Background Color:";
+
+                        // Draw label
+                        ctx.fillStyle = "#aaa";
+                        ctx.font = "12px sans-serif";
+                        ctx.fillText(label, margin, y + 16);
+
+                        // Draw color swatch
+                        const swatchX = margin + ctx.measureText(label).width + 10;
+                        ctx.fillStyle = color;
+                        ctx.fillRect(swatchX, y + 2, swatchSize, swatchSize);
+
+                        // Draw border
+                        ctx.strokeStyle = "#555";
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(swatchX, y + 2, swatchSize, swatchSize);
+
+                        // Draw color value text
+                        ctx.fillStyle = "#fff";
+                        ctx.fillText(color, swatchX + swatchSize + 10, y + 16);
+                    },
+                    computeSize: function(width) {
+                        return [width, 30];
+                    },
+                    serialize: false
+                });
+            }
+
             return result;
         };
 

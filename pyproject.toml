@@ -1,7 +1,7 @@
 [project]
 name = "comfyangel"
 description = "Parameter Overlay, Visual Widgets & Loop nodes for ComfyUI - Display generation parameters on images, true loop without Auto Queue"
-version = "0.4.0"
+version = "0.5.0"
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"

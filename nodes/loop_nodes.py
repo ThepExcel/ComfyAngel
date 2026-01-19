@@ -197,6 +197,7 @@ class WhileLoopEndSimple:
     RETURN_NAMES = ("results",)
     FUNCTION = "while_end"
     CATEGORY = "ComfyAngel/Loop/Internal"
+    DEPRECATED = True  # Hide from menu
 
     def explore_dependencies(self, node_id, dynprompt, upstream, parent_ids):
         node_info = dynprompt.get_node(node_id)
@@ -443,6 +444,7 @@ class WhileLoopEndAdvanced:
     RETURN_NAMES = ByPassTypeTuple(tuple([f"value{i}" for i in range(MAX_SLOTS)]))
     FUNCTION = "while_end"
     CATEGORY = "ComfyAngel/Loop/Internal"
+    DEPRECATED = True  # Hide from menu
 
     def explore_dependencies(self, node_id, dynprompt, upstream, parent_ids):
         node_info = dynprompt.get_node(node_id)
@@ -528,6 +530,7 @@ class GetLength:
     INPUT_IS_LIST = True
     FUNCTION = "get_length"
     CATEGORY = "ComfyAngel/Loop/Internal"
+    DEPRECATED = True  # Hide from menu (shown only if "Show deprecated" enabled)
 
     def get_length(self, items):
         if isinstance(items, list):
@@ -552,6 +555,7 @@ class MathInt:
     RETURN_TYPES = ("INT",)
     FUNCTION = "math_op"
     CATEGORY = "ComfyAngel/Loop/Internal"
+    DEPRECATED = True  # Hide from menu
 
     def math_op(self, a, b, operation):
         ops = {
@@ -589,6 +593,7 @@ class Compare:
     RETURN_TYPES = ("BOOLEAN",)
     FUNCTION = "compare"
     CATEGORY = "ComfyAngel/Loop/Internal"
+    DEPRECATED = True  # Hide from menu
 
     def compare(self, a, b, comparison):
         return (self.COMPARISONS[comparison](a, b),)
@@ -610,6 +615,7 @@ class Accumulate:
     RETURN_TYPES = (any_type,)
     FUNCTION = "accumulate"
     CATEGORY = "ComfyAngel/Loop/Internal"
+    DEPRECATED = True  # Hide from menu
 
     def accumulate(self, existing=None, new_item=None):
         if new_item is None:
@@ -636,17 +642,10 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    # Simple loop
+    # Public loop nodes (shown in menu)
     "ComfyAngel_LoopStartSimple": "Loop Start 🪽",
     "ComfyAngel_LoopEndSimple": "Loop End 🪽",
-    # Advanced loop
     "ComfyAngel_LoopStartAdvanced": "Loop Start (Advanced) 🪽",
     "ComfyAngel_LoopEndAdvanced": "Loop End (Advanced) 🪽",
-    # Internal nodes - prefixed with ~ to sort at bottom
-    "ComfyAngel_WhileLoopEndSimple": "~Internal: While Loop End Simple",
-    "ComfyAngel_WhileLoopEndAdvanced": "~Internal: While Loop End Advanced",
-    "ComfyAngel_GetLength": "~Internal: Get Length",
-    "ComfyAngel_MathInt": "~Internal: Math Int",
-    "ComfyAngel_Compare": "~Internal: Compare",
-    "ComfyAngel_Accumulate": "~Internal: Accumulate",
+    # Internal nodes are NOT listed here = hidden from menu but still functional
 }
