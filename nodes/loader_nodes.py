@@ -82,31 +82,32 @@ class LoadAllImagesFromFolder:
         tensors = []
         filenames = []
 
-        for file_path in image_files:
-            img = Image.open(file_path)
-            img = ImageOps.exif_transpose(img)
+        with torch.no_grad():
+            for file_path in image_files:
+                img = Image.open(file_path)
+                img = ImageOps.exif_transpose(img)
 
-            # Resize to match first image
-            if img.size != target_size:
-                img = img.resize(target_size, Image.LANCZOS)
+                # Resize to match first image
+                if img.size != target_size:
+                    img = img.resize(target_size, Image.LANCZOS)
 
-            # Convert to RGB
-            if img.mode == "I":
-                img = img.point(lambda i: i * (1 / 255))
-            img = img.convert("RGB")
+                # Convert to RGB
+                if img.mode == "I":
+                    img = img.point(lambda i: i * (1 / 255))
+                img = img.convert("RGB")
 
-            # Convert to tensor
-            img_np = np.array(img).astype(np.float32) / 255.0
-            tensors.append(torch.from_numpy(img_np))
+                # Convert to tensor
+                img_np = np.array(img).astype(np.float32) / 255.0
+                tensors.append(torch.from_numpy(img_np))
 
-            # Store filename
-            filenames.append(os.path.basename(file_path))
+                # Store filename
+                filenames.append(os.path.basename(file_path))
 
-        # Stack into batch tensor (B, H, W, C)
-        batch_tensor = torch.stack(tensors, dim=0)
-        filenames_str = "\n".join(filenames)
+            # Stack into batch tensor (B, H, W, C)
+            batch_tensor = torch.stack(tensors, dim=0)
+            filenames_str = "\n".join(filenames)
 
-        return (batch_tensor, filenames_str, len(filenames))
+            return (batch_tensor, filenames_str, len(filenames))
 
     def _get_image_files(self, folder_path: str, include_subdirs: bool) -> list[str]:
         """Get list of valid image files from folder."""
@@ -175,19 +176,20 @@ class SplitImageBatch:
     CATEGORY = "ComfyAngel/Loader"
 
     def split(self, images, index: int, loop: bool = True):
-        # Get batch size
-        total_count = images.shape[0]
+        with torch.no_grad():
+            # Get batch size
+            total_count = images.shape[0]
 
-        # Handle index
-        if loop:
-            index = index % total_count
-        else:
-            index = min(index, total_count - 1)
+            # Handle index
+            if loop:
+                index = index % total_count
+            else:
+                index = min(index, total_count - 1)
 
-        # Extract single image (keep batch dimension)
-        single_image = images[index:index+1]
+            # Extract single image (keep batch dimension)
+            single_image = images[index:index+1]
 
-        return (single_image, index, total_count)
+            return (single_image, index, total_count)
 
     @classmethod
     def IS_CHANGED(cls, images, index, loop=True):
@@ -202,6 +204,6 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "ComfyAngel_LoadAllImagesFromFolder": "Load All Images from Folder 🪽",
+    "ComfyAngel_LoadAllImagesFromFolder": "Load Images Batch from Folder 🪽",
     "ComfyAngel_SplitImageBatch": "Split Image Batch 🪽",
 }
