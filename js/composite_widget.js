@@ -10,9 +10,17 @@ app.registerExtension({
     name: "ComfyAngel.CompositeWidget",
 
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name !== "ComfyAngel_SmartComposite") {
+        // Support both SmartCompositeXY and SmartCompositeAlign
+        const supportedNodes = [
+            "ComfyAngel_SmartCompositeXY",
+            "ComfyAngel_SmartCompositeAlign"
+        ];
+
+        if (!supportedNodes.includes(nodeData.name)) {
             return;
         }
+
+        const isAlignMode = nodeData.name === "ComfyAngel_SmartCompositeAlign";
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
