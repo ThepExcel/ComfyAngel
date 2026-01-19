@@ -23,6 +23,7 @@ app.registerExtension({
             const widgets = {
                 x: this.widgets.find(w => w.name === "x"),
                 y: this.widgets.find(w => w.name === "y"),
+                quick_position: this.widgets.find(w => w.name === "quick_position"),
                 anchor: this.widgets.find(w => w.name === "anchor"),
                 scale: this.widgets.find(w => w.name === "scale_percent" || w.name === "scale"),
                 blend_mode: this.widgets.find(w => w.name === "blend_mode"),
@@ -104,6 +105,24 @@ app.registerExtension({
                 }
             }
 
+            // Check ImageBridge node (ComfyAngel)
+            if (node.type === "ComfyAngel_ImageBridge" || node.comfyClass === "ComfyAngel_ImageBridge") {
+                if (node.images && node.images.length > 0) {
+                    const img = node.images[0];
+                    const url = `/view?filename=${encodeURIComponent(img.filename)}&type=${img.type}&subfolder=${img.subfolder || ""}`;
+                    return { url, width: null, height: null, color: null };
+                }
+            }
+
+            // Check SaveImage node
+            if (node.type === "SaveImage" || node.comfyClass === "SaveImage") {
+                if (node.images && node.images.length > 0) {
+                    const img = node.images[0];
+                    const url = `/view?filename=${encodeURIComponent(img.filename)}&type=${img.type}&subfolder=${img.subfolder || ""}`;
+                    return { url, width: null, height: null, color: null };
+                }
+            }
+
             // Recursively check upstream nodes
             if (node.inputs) {
                 for (const input of node.inputs) {
@@ -133,6 +152,7 @@ app.registerExtension({
             // Get current values
             const currentX = widgets.x?.value || 0;
             const currentY = widgets.y?.value || 0;
+            const currentQuickPosition = widgets.quick_position?.value || "free";
             const currentAnchor = widgets.anchor?.value || "top_left";
             const currentScale = widgets.scale?.value || 100;
             const currentBlendMode = widgets.blend_mode?.value || "normal";
@@ -222,7 +242,7 @@ app.registerExtension({
                     canvasInfo, overlayInfo,
                     canvasWidth, canvasHeight,
                     overlayWidth, overlayHeight,
-                    { currentX, currentY, currentAnchor, currentScale, currentBlendMode, currentOpacity },
+                    { currentX, currentY, currentQuickPosition, currentAnchor, currentScale, currentBlendMode, currentOpacity },
                     widgets
                 );
             };
@@ -242,7 +262,30 @@ app.registerExtension({
             const canvasUrl = typeof canvasInfo === 'string' ? canvasInfo : canvasInfo.url;
             const canvasColor = typeof canvasInfo === 'object' ? canvasInfo.color : null;
             const overlayUrl = typeof overlayInfo === 'string' ? overlayInfo : overlayInfo.url;
-            const { currentX, currentY, currentAnchor, currentScale, currentBlendMode, currentOpacity } = currentValues;
+            const { currentX, currentY, currentQuickPosition, currentAnchor, currentScale, currentBlendMode, currentOpacity } = currentValues;
+
+            // Quick position reference points on canvas
+            const quickPosMap = {
+                "free": [0, 0],
+                "top_left": [0, 0],
+                "top_center": [Math.floor(canvasWidth / 2), 0],
+                "top_right": [canvasWidth, 0],
+                "middle_left": [0, Math.floor(canvasHeight / 2)],
+                "center": [Math.floor(canvasWidth / 2), Math.floor(canvasHeight / 2)],
+                "middle_right": [canvasWidth, Math.floor(canvasHeight / 2)],
+                "bottom_left": [0, canvasHeight],
+                "bottom_center": [Math.floor(canvasWidth / 2), canvasHeight],
+                "bottom_right": [canvasWidth, canvasHeight],
+            };
+
+            // Calculate actual position from quick_position + offset
+            const calcActualPosition = (offsetX, offsetY, quickPos) => {
+                const [refX, refY] = quickPosMap[quickPos] || [0, 0];
+                if (quickPos === "free") {
+                    return [offsetX, offsetY]; // Free mode: offset is absolute
+                }
+                return [refX + offsetX, refY + offsetY];
+            };
 
             // Calculate preview scale
             const maxPreviewSize = 400;
@@ -254,27 +297,29 @@ app.registerExtension({
             const scaledOverlayW = Math.floor(overlayWidth * (currentScale / 100) * scale);
             const scaledOverlayH = Math.floor(overlayHeight * (currentScale / 100) * scale);
 
-            // Initial position
-            const initialX = currentX;
-            const initialY = currentY;
+            // Calculate initial actual position from quick_position + offset
+            const [initialActualX, initialActualY] = calcActualPosition(currentX, currentY, currentQuickPosition);
+            // Preview position (scaled to preview size)
+            const initialPreviewX = (initialActualX / canvasWidth) * previewWidth;
+            const initialPreviewY = (initialActualY / canvasHeight) * previewHeight;
 
             // Controls HTML
             const controlsHTML = `
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                     <label style="color: #aaa;">
-                        X:
+                        X (offset):
                         <input type="number" id="position-x" value="${currentX}"
                             style="width: 100%; background: #333; border: 1px solid #555; color: #fff; padding: 8px; border-radius: 4px; box-sizing: border-box;">
                     </label>
                     <label style="color: #aaa;">
-                        Y:
+                        Y (offset):
                         <input type="number" id="position-y" value="${currentY}"
                             style="width: 100%; background: #333; border: 1px solid #555; color: #fff; padding: 8px; border-radius: 4px; box-sizing: border-box;">
                     </label>
                 </div>
 
                 <label style="color: #aaa; display: block; margin-bottom: 15px;">
-                    Anchor Point:
+                    Anchor Point (overlay):
                     <select id="position-anchor" style="
                         width: 100%;
                         background: #333;
@@ -297,19 +342,19 @@ app.registerExtension({
                 </label>
 
                 <div style="margin-bottom: 15px;">
-                    <div style="color: #aaa; margin-bottom: 8px;">Quick Positions:</div>
+                    <div style="color: #aaa; margin-bottom: 8px;">Quick Position (reference point on canvas):</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px;">
-                        <button class="quick-pos" data-x="0" data-y="0" data-anchor="top_left" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">TL</button>
-                        <button class="quick-pos" data-x="${Math.floor(canvasWidth/2)}" data-y="0" data-anchor="top_center" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">TC</button>
-                        <button class="quick-pos" data-x="${canvasWidth}" data-y="0" data-anchor="top_right" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">TR</button>
-                        <button class="quick-pos" data-x="0" data-y="${Math.floor(canvasHeight/2)}" data-anchor="middle_left" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">ML</button>
-                        <button class="quick-pos" data-x="${Math.floor(canvasWidth/2)}" data-y="${Math.floor(canvasHeight/2)}" data-anchor="center" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">C</button>
-                        <button class="quick-pos" data-x="${canvasWidth}" data-y="${Math.floor(canvasHeight/2)}" data-anchor="middle_right" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">MR</button>
-                        <button class="quick-pos" data-x="0" data-y="${canvasHeight}" data-anchor="bottom_left" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">BL</button>
-                        <button class="quick-pos" data-x="${Math.floor(canvasWidth/2)}" data-y="${canvasHeight}" data-anchor="bottom_center" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">BC</button>
-                        <button class="quick-pos" data-x="${canvasWidth}" data-y="${canvasHeight}" data-anchor="bottom_right" style="padding: 8px; background: #444; border: none; color: #fff; border-radius: 4px; cursor: pointer;">BR</button>
+                        <button class="quick-pos" data-pos="top_left" style="padding: 8px; background: ${currentQuickPosition === 'top_left' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'top_left' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'top_left' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">TL</button>
+                        <button class="quick-pos" data-pos="top_center" style="padding: 8px; background: ${currentQuickPosition === 'top_center' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'top_center' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'top_center' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">TC</button>
+                        <button class="quick-pos" data-pos="top_right" style="padding: 8px; background: ${currentQuickPosition === 'top_right' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'top_right' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'top_right' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">TR</button>
+                        <button class="quick-pos" data-pos="middle_left" style="padding: 8px; background: ${currentQuickPosition === 'middle_left' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'middle_left' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'middle_left' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">ML</button>
+                        <button class="quick-pos" data-pos="center" style="padding: 8px; background: ${currentQuickPosition === 'center' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'center' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'center' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">C</button>
+                        <button class="quick-pos" data-pos="middle_right" style="padding: 8px; background: ${currentQuickPosition === 'middle_right' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'middle_right' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'middle_right' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">MR</button>
+                        <button class="quick-pos" data-pos="bottom_left" style="padding: 8px; background: ${currentQuickPosition === 'bottom_left' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'bottom_left' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'bottom_left' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">BL</button>
+                        <button class="quick-pos" data-pos="bottom_center" style="padding: 8px; background: ${currentQuickPosition === 'bottom_center' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'bottom_center' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'bottom_center' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">BC</button>
+                        <button class="quick-pos" data-pos="bottom_right" style="padding: 8px; background: ${currentQuickPosition === 'bottom_right' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'bottom_right' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'bottom_right' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">BR</button>
                     </div>
-                    <button id="freestyle-btn" style="width: 100%; margin-top: 8px; padding: 8px; background: #0af; border: none; color: #000; border-radius: 4px; cursor: pointer; font-weight: bold;">✦ Freestyle (drag to position)</button>
+                    <button id="freestyle-btn" data-pos="free" style="width: 100%; margin-top: 8px; padding: 8px; background: ${currentQuickPosition === 'free' ? '#0af' : '#444'}; border: none; color: ${currentQuickPosition === 'free' ? '#000' : '#fff'}; font-weight: ${currentQuickPosition === 'free' ? 'bold' : 'normal'}; border-radius: 4px; cursor: pointer;">✦ Free (absolute position from 0,0)</button>
                 </div>
             `;
 
@@ -344,7 +389,19 @@ app.registerExtension({
                                     background-size: 20px 20px;
                                     background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
                                     opacity: 0.3;
-                                "></div>`}
+                                "></div>
+                                <div style="
+                                    position: absolute;
+                                    top: 50%; left: 50%;
+                                    transform: translate(-50%, -50%);
+                                    text-align: center;
+                                    color: #888;
+                                    font-size: 11px;
+                                    padding: 10px;
+                                ">
+                                    <div style="font-weight: bold; margin-bottom: 5px;">No Preview</div>
+                                    <div>Queue workflow first<br>to see canvas image</div>
+                                </div>`}
                                 <div id="overlay-preview" style="
                                     position: absolute;
                                     width: ${scaledOverlayW}px;
@@ -354,8 +411,8 @@ app.registerExtension({
                                     background-size: contain;
                                     background-repeat: no-repeat;
                                     pointer-events: none;
-                                    left: ${(initialX / canvasWidth) * previewWidth}px;
-                                    top: ${(initialY / canvasHeight) * previewHeight}px;
+                                    left: ${initialPreviewX}px;
+                                    top: ${initialPreviewY}px;
                                 "></div>
                                 <div id="position-marker" style="
                                     position: absolute;
@@ -366,8 +423,8 @@ app.registerExtension({
                                     background: rgba(255, 0, 0, 0.5);
                                     transform: translate(-50%, -50%);
                                     pointer-events: none;
-                                    left: ${(initialX / canvasWidth) * previewWidth}px;
-                                    top: ${(initialY / canvasHeight) * previewHeight}px;
+                                    left: ${initialPreviewX}px;
+                                    top: ${initialPreviewY}px;
                                     z-index: 10;
                                 "></div>
                             </div>
@@ -453,6 +510,9 @@ app.registerExtension({
             const yInput = dialog.querySelector("#position-y");
             const anchorSelect = dialog.querySelector("#position-anchor");
 
+            // Track current quick position
+            let selectedQuickPos = currentQuickPosition;
+
             // Calculate anchor offset for overlay preview
             const getAnchorOffset = (anchor, w, h) => {
                 const offsets = {
@@ -505,47 +565,55 @@ app.registerExtension({
                 overlayPreview.style.width = `${scaledW}px`;
                 overlayPreview.style.height = `${scaledH}px`;
 
-                const x = parseInt(xInput.value) || 0;
-                const y = parseInt(yInput.value) || 0;
+                const offsetX = parseInt(xInput.value) || 0;
+                const offsetY = parseInt(yInput.value) || 0;
                 const anchor = anchorSelect.value;
 
-                // Calculate position with anchor offset
-                const [ox, oy] = getAnchorOffset(anchor, scaledW, scaledH);
-                const previewX = (x / canvasWidth) * previewWidth + ox;
-                const previewY = (y / canvasHeight) * previewHeight + oy;
+                // Calculate actual position from quick_position + offset
+                const [actualX, actualY] = calcActualPosition(offsetX, offsetY, selectedQuickPos);
+
+                // Calculate position with anchor offset for preview
+                const [anchorOx, anchorOy] = getAnchorOffset(anchor, scaledW, scaledH);
+                const previewX = (actualX / canvasWidth) * previewWidth + anchorOx;
+                const previewY = (actualY / canvasHeight) * previewHeight + anchorOy;
 
                 overlayPreview.style.left = `${previewX}px`;
                 overlayPreview.style.top = `${previewY}px`;
 
-                // Update marker
-                marker.style.left = `${(x / canvasWidth) * previewWidth}px`;
-                marker.style.top = `${(y / canvasHeight) * previewHeight}px`;
+                // Update marker to show actual position (before anchor offset)
+                marker.style.left = `${(actualX / canvasWidth) * previewWidth}px`;
+                marker.style.top = `${(actualY / canvasHeight) * previewHeight}px`;
             };
 
             // Freestyle button and style helper
             const freestyleBtn = dialog.querySelector("#freestyle-btn");
-            const updateQuickPosStyles = (activeBtn) => {
+            const updateQuickPosStyles = (quickPos) => {
+                // Reset all buttons
                 dialog.querySelectorAll(".quick-pos").forEach(b => {
                     b.style.background = "#444";
                     b.style.color = "#fff";
                     b.style.fontWeight = "normal";
                 });
-                if (activeBtn) {
-                    activeBtn.style.background = "#0af";
-                    activeBtn.style.color = "#000";
-                    activeBtn.style.fontWeight = "bold";
-                    freestyleBtn.style.background = "#444";
-                    freestyleBtn.style.color = "#fff";
-                    freestyleBtn.style.fontWeight = "normal";
-                } else {
-                    // Freestyle mode
+                freestyleBtn.style.background = "#444";
+                freestyleBtn.style.color = "#fff";
+                freestyleBtn.style.fontWeight = "normal";
+
+                // Highlight active button
+                if (quickPos === "free") {
                     freestyleBtn.style.background = "#0af";
                     freestyleBtn.style.color = "#000";
                     freestyleBtn.style.fontWeight = "bold";
+                } else {
+                    const activeBtn = dialog.querySelector(`.quick-pos[data-pos="${quickPos}"]`);
+                    if (activeBtn) {
+                        activeBtn.style.background = "#0af";
+                        activeBtn.style.color = "#000";
+                        activeBtn.style.fontWeight = "bold";
+                    }
                 }
             };
 
-            // Handle canvas click
+            // Handle canvas click - switch to free mode with absolute position
             canvas.addEventListener("click", (e) => {
                 // Ignore clicks on overlay (those are for dragging)
                 if (e.target === overlayPreview) return;
@@ -554,12 +622,15 @@ app.registerExtension({
                 const clickX = e.clientX - rect.left;
                 const clickY = e.clientY - rect.top;
 
+                // Calculate absolute position
                 const x = Math.round((clickX / previewWidth) * canvasWidth);
                 const y = Math.round((clickY / previewHeight) * canvasHeight);
 
+                // Switch to free mode - x,y becomes absolute position
+                selectedQuickPos = "free";
                 xInput.value = x;
                 yInput.value = y;
-                updateQuickPosStyles(null); // Switch to freestyle
+                updateQuickPosStyles("free");
                 updatePreview();
             });
 
@@ -568,20 +639,31 @@ app.registerExtension({
             yInput.addEventListener("input", updatePreview);
             anchorSelect.addEventListener("change", updatePreview);
 
-            // Handle quick position buttons
+            // Handle quick position buttons - set reference point and reset offset to 0
             dialog.querySelectorAll(".quick-pos").forEach(btn => {
                 btn.addEventListener("click", () => {
-                    xInput.value = btn.dataset.x;
-                    yInput.value = btn.dataset.y;
-                    anchorSelect.value = btn.dataset.anchor;
-                    updateQuickPosStyles(btn);
+                    const pos = btn.dataset.pos;
+                    selectedQuickPos = pos;
+                    // Reset offset to 0 when selecting a quick position
+                    xInput.value = 0;
+                    yInput.value = 0;
+                    updateQuickPosStyles(pos);
                     updatePreview();
                 });
             });
 
-            // Handle freestyle button
+            // Handle freestyle button - switch to free mode (absolute position from 0,0)
             freestyleBtn.addEventListener("click", () => {
-                updateQuickPosStyles(null); // Switch to freestyle mode
+                // When switching to free, convert current actual position to absolute
+                const currentOffsetX = parseInt(xInput.value) || 0;
+                const currentOffsetY = parseInt(yInput.value) || 0;
+                const [actualX, actualY] = calcActualPosition(currentOffsetX, currentOffsetY, selectedQuickPos);
+
+                selectedQuickPos = "free";
+                xInput.value = actualX;
+                yInput.value = actualY;
+                updateQuickPosStyles("free");
+                updatePreview();
             });
 
             // Handle scale input (both modes)
@@ -650,21 +732,29 @@ app.registerExtension({
                     const anchor = anchorSelect.value;
                     const scaledW = parseFloat(overlayPreview.style.width) || 0;
                     const scaledH = parseFloat(overlayPreview.style.height) || 0;
-                    const [ox, oy] = getAnchorOffset(anchor, scaledW, scaledH);
+                    const [anchorOx, anchorOy] = getAnchorOffset(anchor, scaledW, scaledH);
 
-                    // Calculate anchor point position (marker position)
-                    const markerX = previewLeft - ox;
-                    const markerY = previewTop - oy;
+                    // Calculate anchor point position (marker position) = actual position
+                    const markerX = previewLeft - anchorOx;
+                    const markerY = previewTop - anchorOy;
 
-                    // Convert to real coordinates
-                    const realX = Math.round((markerX / previewWidth) * canvasWidth);
-                    const realY = Math.round((markerY / previewHeight) * canvasHeight);
+                    // Convert to real coordinates (actual position on canvas)
+                    const actualX = Math.round((markerX / previewWidth) * canvasWidth);
+                    const actualY = Math.round((markerY / previewHeight) * canvasHeight);
 
-                    xInput.value = realX;
-                    yInput.value = realY;
+                    // Calculate offset from current quick position reference
+                    if (selectedQuickPos === "free") {
+                        // Free mode: offset is absolute
+                        xInput.value = actualX;
+                        yInput.value = actualY;
+                    } else {
+                        // Quick position mode: calculate offset from reference
+                        const [refX, refY] = quickPosMap[selectedQuickPos] || [0, 0];
+                        xInput.value = actualX - refX;
+                        yInput.value = actualY - refY;
+                    }
 
-                    // Switch to freestyle mode after dragging
-                    updateQuickPosStyles(null);
+                    updatePreview();
                 };
 
                 document.addEventListener("mousemove", handleMouseMove);
@@ -682,6 +772,7 @@ app.registerExtension({
             dialog.querySelector("#position-apply").onclick = () => {
                 if (widgets.x) widgets.x.value = parseInt(xInput.value) || 0;
                 if (widgets.y) widgets.y.value = parseInt(yInput.value) || 0;
+                if (widgets.quick_position) widgets.quick_position.value = selectedQuickPos;
                 if (widgets.anchor) widgets.anchor.value = anchorSelect.value;
                 if (widgets.scale) widgets.scale.value = parseInt(scaleInput.value) || 100;
                 if (widgets.blend_mode) widgets.blend_mode.value = blendModeSelect.value;

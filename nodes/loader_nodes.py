@@ -115,10 +115,22 @@ class LoadAllImagesFromFolder:
                 if target_size and img.size != target_size:
                     img = img.resize(target_size, Image.LANCZOS)
 
-                # Convert to RGB
+                # Convert to RGB or RGBA (preserve alpha if present)
                 if img.mode == "I":
                     img = img.point(lambda i: i * (1 / 255))
-                img = img.convert("RGB")
+
+                if img.mode == "RGBA":
+                    # Keep RGBA - preserve alpha channel
+                    pass
+                elif img.mode == "LA":
+                    # Grayscale with alpha -> RGBA
+                    img = img.convert("RGBA")
+                elif img.mode == "P" and "transparency" in img.info:
+                    # Palette with transparency -> RGBA
+                    img = img.convert("RGBA")
+                else:
+                    # Everything else -> RGB
+                    img = img.convert("RGB")
 
                 # Convert to tensor (H, W, C) with batch dim
                 img_np = np.array(img).astype(np.float32) / 255.0

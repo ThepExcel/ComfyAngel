@@ -43,9 +43,6 @@ class LoopStartSimple:
     Output:
         flow: Connect to Loop End
         item: Current item from the batch
-        index: Current iteration index (0-based)
-        total: Total number of items
-        is_last: True if this is the last iteration
     """
 
     @classmethod
@@ -56,25 +53,28 @@ class LoopStartSimple:
             },
             "hidden": {
                 "_index": (any_type,),
-                "_accumulated": (any_type,),
+                "_accumulated1": (any_type,),
+                "_accumulated2": (any_type,),
             }
         }
 
-    # Output index 5 is for accumulated value (hidden but accessible via rawLink)
-    RETURN_TYPES = ByPassTypeTuple(("FLOW_CONTROL", any_type, "INT", "INT", "BOOLEAN", any_type))
-    RETURN_NAMES = ("flow", "item", "index", "total", "is_last", "_acc")
+    # Only 2 visible outputs: flow and item
+    RETURN_TYPES = ByPassTypeTuple(("FLOW_CONTROL", any_type))
+    RETURN_NAMES = ("flow", "item")
     INPUT_IS_LIST = True
     FUNCTION = "loop_start"
     CATEGORY = "ComfyAngel/Loop"
 
-    def loop_start(self, items, _index=None, _accumulated=None):
+    def loop_start(self, items, _index=None, _accumulated1=None, _accumulated2=None):
         if isinstance(items, list) and len(items) == 1 and isinstance(items[0], torch.Tensor):
             items = items[0]
 
         if isinstance(_index, list):
             _index = _index[0] if _index else None
-        if isinstance(_accumulated, list):
-            _accumulated = _accumulated[0] if _accumulated else None
+        if isinstance(_accumulated1, list):
+            _accumulated1 = _accumulated1[0] if _accumulated1 else None
+        if isinstance(_accumulated2, list):
+            _accumulated2 = _accumulated2[0] if _accumulated2 else None
 
         index = 0 if _index is None else int(_index)
         total = get_items_length(items)
@@ -83,22 +83,27 @@ class LoopStartSimple:
             raise ValueError("Cannot loop over empty items")
 
         item = get_item_at_index(items, min(index, total - 1))
-        is_last = (index >= total - 1)
 
-        # Return accumulated as output so it can be referenced by LoopEnd
-        return ("loop_flow", item, index, total, is_last, _accumulated)
+        # Pack state into flow output (extracted by FlowStateExtractor)
+        flow_state = {
+            "type": "loop_flow",
+            "index": index,
+            "acc1": _accumulated1,
+            "acc2": _accumulated2,
+        }
+        return (flow_state, item)
 
 
 class LoopEndSimple:
     """
-    End a loop and collect results - Simple version.
+    End a loop and collect results - Simple version with 2 result slots.
 
     Input:
         flow: Connect from Loop Start
-        result: Value to accumulate across iterations
+        result1, result2: Values to accumulate across iterations
 
     Output:
-        results: Accumulated results (batched tensor or list)
+        results1, results2: Accumulated results (batched tensors or lists)
     """
 
     @classmethod
@@ -108,7 +113,8 @@ class LoopEndSimple:
                 "flow": ("FLOW_CONTROL", {"rawLink": True}),
             },
             "optional": {
-                "result": (any_type, {"rawLink": True}),
+                "result1": (any_type, {"rawLink": True}),
+                "result2": (any_type, {"rawLink": True}),
             },
             "hidden": {
                 "dynprompt": "DYNPROMPT",
@@ -116,12 +122,13 @@ class LoopEndSimple:
             }
         }
 
-    RETURN_TYPES = ByPassTypeTuple((any_type,))
-    RETURN_NAMES = ("results",)
+    RETURN_TYPES = ByPassTypeTuple((any_type, any_type))
+    RETURN_NAMES = ("results1", "results2")
     FUNCTION = "loop_end"
     CATEGORY = "ComfyAngel/Loop"
+    OUTPUT_NODE = True  # Execute even without downstream connections
 
-    def loop_end(self, flow, result=None, dynprompt=None, unique_id=None):
+    def loop_end(self, flow, result1=None, result2=None, dynprompt=None, unique_id=None):
         if not HAS_GRAPH_UTILS:
             raise RuntimeError("Loop nodes require ComfyUI with comfy_execution module.")
 
@@ -139,24 +146,35 @@ class LoopEndSimple:
         total_node = graph.node("ComfyAngel_GetLength", items=items_input)
         total = total_node.out(0)
 
-        # Calculate next index (index is output 2)
-        add_node = graph.node("ComfyAngel_MathInt", operation="add", a=[loop_start_id, 2], b=1)
+        # Extract state from flow (flow carries index and accumulated values)
+        # Use output 0 from loop_start which contains the flow_state dict
+        flow_value = [loop_start_id, 0]
+        state_extractor = graph.node("ComfyAngel_FlowStateExtractor", flow_state=flow_value)
+        current_index = state_extractor.out(0)  # index
+        prev_acc1 = state_extractor.out(1)      # accumulated1
+        prev_acc2 = state_extractor.out(2)      # accumulated2
+
+        # Calculate next index
+        add_node = graph.node("ComfyAngel_MathInt", operation="add", a=current_index, b=1)
         next_index = add_node.out(0)
 
         # Check condition
         cond_node = graph.node("ComfyAngel_Compare", a=next_index, b=total, comparison="a < b")
         should_continue = cond_node.out(0)
 
-        # Accumulate result - use OUTPUT from LoopStart (index 5), not input!
-        # This ensures we get the value from the cloned LoopStart during iteration
-        ACCUMULATED_OUTPUT_INDEX = 5
-        prev_accumulated = [loop_start_id, ACCUMULATED_OUTPUT_INDEX]
-
-        if result is not None:
-            acc_node = graph.node("ComfyAngel_Accumulate", existing=prev_accumulated, new_item=result)
-            accumulated = acc_node.out(0)
+        # Accumulate result1
+        if result1 is not None:
+            acc1_node = graph.node("ComfyAngel_Accumulate", existing=prev_acc1, new_item=result1)
+            accumulated1 = acc1_node.out(0)
         else:
-            accumulated = prev_accumulated
+            accumulated1 = prev_acc1
+
+        # Accumulate result2
+        if result2 is not None:
+            acc2_node = graph.node("ComfyAngel_Accumulate", existing=prev_acc2, new_item=result2)
+            accumulated2 = acc2_node.out(0)
+        else:
+            accumulated2 = prev_acc2
 
         # Create while loop end node
         while_end = graph.node(
@@ -164,11 +182,12 @@ class LoopEndSimple:
             flow=flow,
             condition=should_continue,
             next_index=next_index,
-            accumulated=accumulated,
+            accumulated1=accumulated1,
+            accumulated2=accumulated2,
         )
 
         return {
-            "result": (while_end.out(0),),
+            "result": (while_end.out(0), while_end.out(1)),
             "expand": graph.finalize(),
         }
 
@@ -185,7 +204,8 @@ class WhileLoopEndSimple:
                 "next_index": ("INT",),
             },
             "optional": {
-                "accumulated": (any_type,),
+                "accumulated1": (any_type,),
+                "accumulated2": (any_type,),
             },
             "hidden": {
                 "dynprompt": "DYNPROMPT",
@@ -193,8 +213,8 @@ class WhileLoopEndSimple:
             }
         }
 
-    RETURN_TYPES = ByPassTypeTuple((any_type,))
-    RETURN_NAMES = ("results",)
+    RETURN_TYPES = ByPassTypeTuple((any_type, any_type))
+    RETURN_NAMES = ("results1", "results2")
     FUNCTION = "while_end"
     CATEGORY = "ComfyAngel/Loop/Internal"
     DEPRECATED = True  # Hide from menu
@@ -224,9 +244,9 @@ class WhileLoopEndSimple:
                 contained[child_id] = True
                 self.collect_contained(child_id, upstream, contained)
 
-    def while_end(self, flow, condition, next_index, accumulated=None, dynprompt=None, unique_id=None):
+    def while_end(self, flow, condition, next_index, accumulated1=None, accumulated2=None, dynprompt=None, unique_id=None):
         if not condition:
-            return (accumulated,)
+            return (accumulated1, accumulated2)
 
         graph = GraphBuilder()
         loop_start_id = flow[0]
@@ -258,11 +278,12 @@ class WhileLoopEndSimple:
 
         new_loop_start = graph.lookup_node(loop_start_id)
         new_loop_start.set_input("_index", next_index)
-        new_loop_start.set_input("_accumulated", accumulated)
+        new_loop_start.set_input("_accumulated1", accumulated1)
+        new_loop_start.set_input("_accumulated2", accumulated2)
 
         my_clone = graph.lookup_node("Recurse")
         return {
-            "result": (my_clone.out(0),),
+            "result": (my_clone.out(0), my_clone.out(1)),
             "expand": graph.finalize(),
         }
 
@@ -285,6 +306,8 @@ class LoopStartAdvanced:
         is_last: True if this is the last iteration
         value0-9: Pass-through values
     """
+
+    DEPRECATED = True  # Hidden for now
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -350,6 +373,8 @@ class LoopEndAdvanced:
         results0-9: Accumulated results (batched tensors or lists)
     """
 
+    DEPRECATED = True  # Hidden for now
+
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -369,6 +394,7 @@ class LoopEndAdvanced:
     RETURN_NAMES = ByPassTypeTuple(tuple([f"results{i}" for i in range(MAX_SLOTS)]))
     FUNCTION = "loop_end"
     CATEGORY = "ComfyAngel/Loop"
+    OUTPUT_NODE = True  # Execute even without downstream connections
 
     def loop_end(self, flow, dynprompt=None, unique_id=None, **kwargs):
         if not HAS_GRAPH_UTILS:
@@ -623,6 +649,38 @@ class Accumulate:
         return (accumulate_results(existing, new_item),)
 
 
+class FlowStateExtractor:
+    """Internal: Extract loop state from flow_state dict."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "flow_state": ("FLOW_CONTROL",),  # No rawLink - we want the actual value
+            },
+        }
+
+    RETURN_TYPES = ("INT", any_type, any_type)
+    RETURN_NAMES = ("index", "accumulated1", "accumulated2")
+    FUNCTION = "extract"
+    CATEGORY = "ComfyAngel/Loop/Internal"
+    DEPRECATED = True  # Hide from menu
+
+    def extract(self, flow_state):
+        # flow_state is a dict: {"type": "loop_flow", "index": int, "acc1": any, "acc2": any}
+        if isinstance(flow_state, dict):
+            index = flow_state.get("index", 0)
+            acc1 = flow_state.get("acc1", None)
+            acc2 = flow_state.get("acc2", None)
+        else:
+            # Fallback for unexpected input
+            index = 0
+            acc1 = None
+            acc2 = None
+
+        return (int(index), acc1, acc2)
+
+
 # ============== Node Mappings ==============
 
 NODE_CLASS_MAPPINGS = {
@@ -635,6 +693,7 @@ NODE_CLASS_MAPPINGS = {
     # Internal nodes
     "ComfyAngel_WhileLoopEndSimple": WhileLoopEndSimple,
     "ComfyAngel_WhileLoopEndAdvanced": WhileLoopEndAdvanced,
+    "ComfyAngel_FlowStateExtractor": FlowStateExtractor,
     "ComfyAngel_GetLength": GetLength,
     "ComfyAngel_MathInt": MathInt,
     "ComfyAngel_Compare": Compare,
@@ -645,7 +704,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     # Public loop nodes (shown in menu)
     "ComfyAngel_LoopStartSimple": "Loop Start 🪽",
     "ComfyAngel_LoopEndSimple": "Loop End 🪽",
-    "ComfyAngel_LoopStartAdvanced": "Loop Start (Advanced) 🪽",
-    "ComfyAngel_LoopEndAdvanced": "Loop End (Advanced) 🪽",
+    # Advanced loop nodes hidden for now (use DEPRECATED = True in class)
     # Internal nodes are NOT listed here = hidden from menu but still functional
 }

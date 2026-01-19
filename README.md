@@ -6,16 +6,29 @@ Parameter Overlay, Visual Widgets & Loop nodes for ComfyUI
 
 ## Screenshots
 
-### Example Workflow
-![Example Workflow](assets/flow-example.png)
+### Loop Workflow
+![Loop Workflow](assets/Loop.png)
 
-[Download Example Workflow (JSON)](examples/ComfyAngel%20Example.json)
+### Smart Composite - Visual Position Picker
+![Smart Composite](assets/smart-composite1.png)
+![Smart Composite Dialog](assets/smart-composite2.png)
 
-### Color Picker with Eyedropper
-![Color Picker](assets/colorpicker.png)
+### Parameter Overlay
+![Parameter Overlay](assets/parameteroverlay.png)
 
-### Smart Crop Editor
-![Smart Crop](assets/smart-crop.png)
+### Text Permutation
+![Text Permutation](assets/TextPermutation.png)
+
+### Smart Crop - Visual Editor
+![Smart Crop](assets/smartcrop1.png)
+![Smart Crop Dialog](assets/smartcrop2.png)
+
+### Widget Nodes - Color Picker, Resolution Picker, Solid Color
+![Widget Nodes](assets/ColorPicker-ResolutionPicker-SolidColor.png)
+![Color Picker](assets/colorpicker2.png)
+
+### Load Image + Metadata
+![Metadata](assets/metadata.png)
 
 ---
 
@@ -45,201 +58,56 @@ Then restart ComfyUI.
 
 True loop functionality **without Auto Queue**. Iterate through batches/lists and accumulate results in a single execution.
 
-ComfyAngel provides two versions of Loop nodes:
-- **Simple** - For most use cases. Single result slot, easy to use.
-- **Advanced** - For complex workflows. 10 value/result slots for multiple accumulations.
+![Loop Workflow](assets/Loop.png)
 
 ---
 
-#### Loop Start 🪽 (Simple)
+#### Loop Start 🪽
 
-Start a loop over items. This is the recommended version for most workflows.
-
-**How it works:**
-1. Takes a batch of items (images, texts, etc.)
-2. On each iteration, outputs the current item
-3. Connect `flow` to `Loop End` to complete the loop
+Start a loop over items.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| items | ANY | Batch/list to iterate over. Accepts IMAGE batch tensors, lists of strings, or any iterable. |
+| items | ANY | Batch/list to iterate over. Accepts IMAGE batch, lists of strings, or any iterable. |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| flow | FLOW_CONTROL | **Must connect to Loop End.** This controls the loop execution. |
+| flow | FLOW_CONTROL | **Must connect to Loop End.** |
 | item | ANY | Current item from the batch for this iteration. |
-| index | INT | Current iteration index (0-based). First item = 0, second = 1, etc. |
-| total | INT | Total number of items in the batch. |
-| is_last | BOOLEAN | True only on the final iteration. Useful for conditional logic. |
 
 **Example - Loop through text prompts:**
 ```
 [Text Permutation] outputs: ["cat on chair", "cat on sofa", "dog on chair", "dog on sofa"]
          ↓
-[Loop Start] iteration 0: item = "cat on chair", index = 0, total = 4, is_last = False
-[Loop Start] iteration 1: item = "cat on sofa",  index = 1, total = 4, is_last = False
-[Loop Start] iteration 2: item = "dog on chair", index = 2, total = 4, is_last = False
-[Loop Start] iteration 3: item = "dog on sofa",  index = 3, total = 4, is_last = True
+[Loop Start] iteration 0: item = "cat on chair"
+[Loop Start] iteration 1: item = "cat on sofa"
+[Loop Start] iteration 2: item = "dog on chair"
+[Loop Start] iteration 3: item = "dog on sofa"
 ```
 
 ---
 
-#### Loop End 🪽 (Simple)
+#### Loop End 🪽
 
 End a loop and collect all results into a single output.
-
-**How it works:**
-1. Receives `flow` from Loop Start
-2. Accumulates `result` from each iteration
-3. After all iterations complete, outputs all results as a batch/list
 
 | Input | Type | Description |
 |-------|------|-------------|
 | flow | FLOW_CONTROL | **Must connect from Loop Start.** |
-| result | ANY | Value to collect from each iteration. Can be IMAGE, STRING, or any type. |
+| result1 | ANY | Value to collect from each iteration (optional). |
+| result2 | ANY | Second value to collect (optional). |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| results | ANY | All accumulated results. IMAGE tensors become a batch (B,H,W,C). Strings become a list. |
+| results1 | ANY | All accumulated results from result1. |
+| results2 | ANY | All accumulated results from result2. |
+
+**v0.6.0:** Loop End now executes even without downstream connections. You can run loops without connecting nodes to the results outputs.
 
 **Accumulation behavior:**
 - **IMAGE/MASK tensors:** Concatenated into a batch tensor. 4 images → tensor shape (4, H, W, C)
-- **Strings:** Collected into a Python list. 4 strings → ["str1", "str2", "str3", "str4"]
+- **Strings:** Collected into a Python list.
 - **Other types:** Collected into a Python list.
-
----
-
-#### Loop Start (Advanced) 🪽
-
-Advanced version with 10 value slots for complex accumulation patterns.
-
-**When to use Advanced:**
-- You need to accumulate multiple different values (e.g., both images AND their prompts)
-- You need to pass values between iterations (e.g., running totals, state)
-- Simple version doesn't meet your needs
-
-| Input | Type | Description |
-|-------|------|-------------|
-| items | ANY | Batch/list to iterate over. |
-| initial_value0 | ANY | Optional. Initial value for slot 0. Passed to first iteration. |
-| initial_value1 | ANY | Optional. Initial value for slot 1. |
-| ... | ... | ... |
-| initial_value9 | ANY | Optional. Initial value for slot 9. |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| flow | FLOW_CONTROL | Connect to Loop End (Advanced). |
-| item | ANY | Current item from the batch. |
-| index | INT | Current iteration index (0-based). |
-| total | INT | Total number of items. |
-| is_last | BOOLEAN | True if this is the last iteration. |
-| value0 | ANY | Current value of slot 0 (from initial_value0 or accumulated). |
-| value1 | ANY | Current value of slot 1. |
-| ... | ... | ... |
-| value9 | ANY | Current value of slot 9. |
-
----
-
-#### Loop End (Advanced) 🪽
-
-Advanced version that accumulates up to 10 separate result streams.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| flow | FLOW_CONTROL | Connect from Loop Start (Advanced). |
-| result0 | ANY | Value to accumulate in slot 0. |
-| result1 | ANY | Value to accumulate in slot 1. |
-| ... | ... | ... |
-| result9 | ANY | Value to accumulate in slot 9. |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| results0 | ANY | All accumulated values from slot 0. |
-| results1 | ANY | All accumulated values from slot 1. |
-| ... | ... | ... |
-| results9 | ANY | All accumulated values from slot 9. |
-
----
-
-#### Complete Loop Example (Simple)
-
-**Goal:** Generate 4 images from different prompts and collect them all.
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         WORKFLOW                                 │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  [Text Permutation]                                              │
-│   template: "a {cat,dog} on a {chair,sofa}"                     │
-│   ↓ texts (list of 4 strings)                                   │
-│                                                                  │
-│  [Loop Start]                                                    │
-│   items ← texts                                                  │
-│   ↓ item (single string per iteration)                          │
-│                                                                  │
-│  [CLIP Text Encode]                                              │
-│   text ← item                                                    │
-│   ↓ conditioning                                                 │
-│                                                                  │
-│  [KSampler] → [VAE Decode]                                       │
-│   ↓ image                                                        │
-│                                                                  │
-│  [Image Bridge] ← image (preview each iteration)                 │
-│   ↓ image                                                        │
-│                                                                  │
-│  [Loop End]                                                      │
-│   flow ← Loop Start                                              │
-│   result ← image                                                 │
-│   ↓ results (batch of 4 images)                                 │
-│                                                                  │
-│  [Save Image] ← results                                          │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Execution flow:**
-1. Text Permutation generates: ["a cat on a chair", "a cat on a sofa", "a dog on a chair", "a dog on a sofa"]
-2. Loop Start receives the list, begins iteration 0
-3. KSampler generates image for "a cat on a chair"
-4. Image Bridge shows preview
-5. Loop End collects image, triggers iteration 1
-6. Steps 3-5 repeat for remaining prompts
-7. After iteration 3 (last), Loop End outputs batch of 4 images
-8. Save Image saves all 4 images
-
-**Key points:**
-- Use **Image Bridge** inside the loop to see each image as it generates
-- **No Auto Queue needed** - runs all iterations in single execution
-- Results are automatically batched
-
----
-
-#### Complete Loop Example (Advanced)
-
-**Goal:** Generate images and keep track of both the images AND their prompts.
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  [Text Permutation] → texts                                      │
-│         ↓                                                        │
-│  [Loop Start (Advanced)]                                         │
-│   items ← texts                                                  │
-│   ↓ item, value0, value1...                                     │
-│                                                                  │
-│  [Generate Image] ← item                                         │
-│   ↓ image                                                        │
-│                                                                  │
-│  [Loop End (Advanced)]                                           │
-│   flow ← Loop Start                                              │
-│   result0 ← item (the prompt text)                              │
-│   result1 ← image (the generated image)                         │
-│   ↓                                                              │
-│   results0 = ["prompt1", "prompt2", "prompt3", "prompt4"]       │
-│   results1 = batch of 4 images                                  │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
@@ -247,48 +115,27 @@ Advanced version that accumulates up to 10 separate result streams.
 
 #### Load Images Batch from Folder 🪽
 
-Load images from a folder with optional resize modes.
-
-**How it works:**
-1. Scans the specified folder for image files
-2. Optionally resizes images (or keeps original sizes)
-3. Returns as a list of images for loop processing
+Load images from a folder with folder browser, validation, and history.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| folder_path | STRING | Path to folder. Use **Browse Folder** button for native OS folder picker. |
-| sort_by | ENUM | How to order: `name`, `modified_date`, `created_date` |
-| max_images | INT | Maximum images to load. `0` = unlimited. Default: 0 |
-| start_index | INT | Skip first N images. Default: 0 |
-| include_subdirs | BOOLEAN | Scan subfolders recursively. Default: false |
-| resize_mode | ENUM | `disabled` (keep original sizes), `resize_to_first`, `resize_to_largest`, `resize_to_smallest` |
+| folder_path | STRING | Path to folder. Use **Validate Folder** button to check. |
+| sort_by | ENUM | `name`, `modified_date`, `created_date` |
+| max_images | INT | Maximum images to load. `0` = unlimited. |
+| start_index | INT | Skip first N images. |
+| include_subdirs | BOOLEAN | Scan subfolders recursively. |
+| resize_mode | ENUM | `disabled`, `resize_to_first`, `resize_to_largest`, `resize_to_smallest` |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| images | IMAGE[] | **List** of images (supports different sizes when `resize_mode: disabled`). |
+| images | IMAGE[] | **List** of images (preserves RGBA when present). |
 | filenames | STRING | Newline-separated list of loaded filenames. |
 | count | INT | Number of images loaded. |
 
-**Supported formats:** PNG, JPG, JPEG, WEBP, BMP, GIF
-
-**Resize modes:**
-- `disabled` — Keep original sizes. Use with Loop nodes to process each image separately.
-- `resize_to_first` — All images resized to match first image's dimensions.
-- `resize_to_largest` — All images resized to largest width × largest height found.
-- `resize_to_smallest` — All images resized to smallest dimensions found.
-
-**Browse Folder button:** Opens native OS folder picker (no "upload files" warning).
-
-**Use with Loop:**
-```
-[Load Images Batch from Folder] → images (list)
-         ↓
-[Loop Start] → item (single image per iteration)
-         ↓
-[Process Image] → processed
-         ↓
-[Loop End] → results
-```
+**Features:**
+- **Validate Folder button:** Shows image count and validates path
+- **Folder history:** Recent folders saved for quick access
+- **RGBA preservation:** Images with alpha channels are preserved as 4-channel tensors
 
 ---
 
@@ -296,33 +143,17 @@ Load images from a folder with optional resize modes.
 
 Extract a single image from a batch by index. Useful for Auto Queue workflows.
 
-**How it works:**
-1. Takes a batch of images
-2. Returns the image at the specified index
-3. With Auto Queue, the index auto-increments each run
-
 | Input | Type | Description |
 |-------|------|-------------|
 | images | IMAGE | Batch of images to split. |
-| index | INT | Which image to extract (0-based). Has `control_after_generate` for auto-increment. |
-| loop | BOOLEAN | If true, wraps around when index exceeds batch size. If false, clamps to last image. Default: true |
+| index | INT | Which image to extract (0-based). Auto-increments with Auto Queue. |
+| loop | BOOLEAN | Wrap around when index exceeds batch size. Default: true |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| image | IMAGE | Single image at the specified index. Shape: (1, H, W, C) |
-| index | INT | The actual index used (after looping/clamping). |
-| total_count | INT | Total number of images in the input batch. |
-
-**Use case - Auto Queue workflow:**
-1. Load batch of 10 images
-2. Split Image Batch with index = 0
-3. Process the single image
-4. Enable Auto Queue
-5. Each queue processes next image (index auto-increments: 0, 1, 2...)
-
-**Difference from Loop nodes:**
-- **Split Image Batch + Auto Queue:** Each queue run processes ONE image. Good for heavy processing.
-- **Loop nodes:** Single queue run processes ALL images. Good for batch operations.
+| image | IMAGE | Single image at the specified index. |
+| index | INT | The actual index used. |
+| total_count | INT | Total images in the batch. |
 
 ---
 
@@ -330,128 +161,65 @@ Extract a single image from a batch by index. Useful for Auto Queue workflows.
 
 #### Text Permutation 🪽
 
-Generate all combinations from a template with inline options. Perfect for batch prompt generation.
+Generate all combinations from a template with inline options.
 
-**How it works:**
-1. Parse template for `{option1,option2,...}` patterns
-2. Generate all possible combinations
-3. Output as a list of strings
+![Text Permutation](assets/TextPermutation.png)
 
 | Input | Type | Description |
 |-------|------|-------------|
-| template | STRING | Template text with `{option1,option2}` syntax for variable parts. |
-| separator | STRING | Character that separates options inside braces. Default: `,` |
-| trim_options | BOOLEAN | Remove whitespace around each option. Default: true |
+| template | STRING | Template with `{option1,option2}` syntax. |
+| separator | STRING | Separator inside braces. Default: `,` |
+| trim_options | BOOLEAN | Remove whitespace around options. Default: true |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| texts | STRING[] | List of all generated combinations. |
-| count | INT | Number of combinations generated. |
+| texts | STRING[] | List of all combinations. |
+| count | INT | Number of combinations. |
 
-**Example 1 - Basic usage:**
+**Example:**
 ```
-Template: "a {cat,dog} sitting on a {red,blue} {chair,sofa}"
+Template: "a {cat,dog} on a {chair,sofa}"
 
-Output (12 combinations):
-- "a cat sitting on a red chair"
-- "a cat sitting on a red sofa"
-- "a cat sitting on a blue chair"
-- "a cat sitting on a blue sofa"
-- "a dog sitting on a red chair"
-- "a dog sitting on a red sofa"
-- "a dog sitting on a blue chair"
-- "a dog sitting on a blue sofa"
-... (and 4 more)
-```
-
-**Example 2 - Quality tags:**
-```
-Template: "{masterpiece, best quality,}{,extremely detailed} {1girl,1boy}"
-
-Output:
-- "masterpiece, best quality, 1girl"
-- "masterpiece, best quality, extremely detailed 1girl"
-- "masterpiece, best quality, 1boy"
-- "masterpiece, best quality, extremely detailed 1boy"
-- " 1girl" (empty first option)
-- " extremely detailed 1girl"
-... etc
-```
-
-**Example 3 - Custom separator:**
-```
-Template: "photo of {beach|mountain|forest}"
-Separator: "|"
-
-Output:
-- "photo of beach"
-- "photo of mountain"
-- "photo of forest"
-```
-
-**Use with Loop:**
-```
-[Text Permutation] → texts
-         ↓
-[Loop Start] items ← texts
-         ↓ item (one prompt per iteration)
-[KSampler]
+Output (4 combinations):
+- "a cat on a chair"
+- "a cat on a sofa"
+- "a dog on a chair"
+- "a dog on a sofa"
 ```
 
 ---
 
 #### Text Combine 🪽
 
-Combine multiple text strings into one with a separator.
+Combine multiple text strings into one.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| text1 | STRING | First text (required). |
-| text2 | STRING | Second text (optional). |
-| text3 | STRING | Third text (optional). |
-| text4 | STRING | Fourth text (optional). |
-| separator | STRING | String to insert between texts. Default: `\n` (newline) |
+| text1-4 | STRING | Texts to combine (text1 required, others optional). |
+| separator | STRING | String between texts. Default: `\n` |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| combined | STRING | All non-empty texts joined with separator. |
-
-**Example:**
-```
-text1: "masterpiece, best quality"
-text2: "1girl, blonde hair"
-text3: "" (empty)
-text4: "detailed background"
-separator: ", "
-
-Output: "masterpiece, best quality, 1girl, blonde hair, detailed background"
-```
-
-**Note:** Empty inputs are skipped (no double separators).
+| combined | STRING | All non-empty texts joined. |
 
 ---
 
 #### JSON Extract 🪽
 
-Extract values from JSON using field paths. Perfect for parsing metadata or API responses.
-
-**How it works:**
-1. Parse JSON string input
-2. Extract values at specified field paths
-3. Return as list (for loops) and joined string
+Extract values from JSON using field paths.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| json_string | STRING | JSON text to parse. Connect from metadata or paste directly. |
-| fields | STRING | Field paths, one per line (or use custom delimiter). |
-| delimiter | ENUM | How fields are separated: `newline`, `comma`, `pipe`, `semicolon` |
-| output_delimiter | ENUM | How to join output values. |
-| default_value | STRING | Value when field not found. Default: empty string |
+| json_string | STRING | JSON text to parse. |
+| fields | STRING | Field paths, one per line. |
+| delimiter | ENUM | Field separator: `newline`, `comma`, `pipe`, `semicolon` |
+| output_delimiter | ENUM | Output value separator. |
+| default_value | STRING | Value when field not found. |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| values | STRING[] | List of extracted values. Use with Loop nodes. |
-| values_joined | STRING | All values joined with output_delimiter. |
+| values | STRING[] | List of extracted values. |
+| values_joined | STRING | All values joined. |
 | count | INT | Number of fields extracted. |
 
 **Field path syntax:**
@@ -459,36 +227,9 @@ Extract values from JSON using field paths. Perfect for parsing metadata or API 
 seed                    → json["seed"]
 3.inputs.steps          → json["3"]["inputs"]["steps"]
 nodes[0].type           → json["nodes"][0]["type"]
-workflow.nodes[2].title → json["workflow"]["nodes"][2]["title"]
 ```
 
-**Browse JSON Fields button:** Opens visual JSON tree viewer. Click any field to add its path to the fields list.
-
-![JSON Extract Browser](assets/json-extract-browser.png)
-
-**Example - Extract from ComfyUI metadata:**
-```json
-{"3": {"inputs": {"seed": 12345, "steps": 30, "cfg": 7.5}}}
-```
-```
-Fields:
-3.inputs.seed
-3.inputs.steps
-3.inputs.cfg
-
-Output:
-values = ["12345", "30", "7.5"]
-values_joined = "12345\n30\n7.5"
-```
-
-**Use with Loop:**
-```
-[Load Image + Metadata] → metadata_raw
-         ↓
-[JSON Extract] fields: "3.inputs.seed" → values (list)
-         ↓
-[Loop Start] → item (one seed per iteration)
-```
+**Browse JSON Fields button:** Opens visual JSON tree viewer.
 
 ---
 
@@ -496,53 +237,45 @@ values_joined = "12345\n30\n7.5"
 
 #### Load Image + Metadata 🪽
 
-Load an image file and extract any embedded generation metadata.
+Load an image and extract embedded generation metadata.
 
-**How it works:**
-1. Loads the image file
-2. Reads PNG metadata chunks or EXIF data
-3. Parses A1111 or ComfyUI format parameters
-4. Returns both the image and extracted metadata
+![Metadata](assets/metadata.png)
 
 | Input | Type | Description |
 |-------|------|-------------|
-| image | IMAGE_UPLOAD | Select image file from ComfyUI input folder. |
+| image | IMAGE_UPLOAD | Select image file. |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| image | IMAGE | The loaded image as tensor. |
-| mask | MASK | Alpha channel as mask (white = opaque). If no alpha, returns white mask. |
-| metadata_raw | STRING | Raw metadata string exactly as stored in file. |
-| metadata_formatted | STRING | Human-readable formatted version of parameters. |
+| image | IMAGE | The loaded image. |
+| mask | MASK | Alpha channel as mask. |
+| metadata_raw | STRING | Raw metadata string. |
+| metadata_formatted | STRING | Human-readable formatted parameters. |
 
-**Supported metadata formats:**
-- **A1111/Civitai:** `parameters` PNG chunk with format `prompt\nNegative: ...\nSteps: 30, CFG: 7...`
-- **ComfyUI:** `prompt` PNG chunk containing JSON workflow
-
-**Use case:** Load images from Civitai or other sources to see their generation parameters.
+**Supported formats:** A1111/Civitai, ComfyUI workflow embedding
 
 ---
 
 #### Parameter Parser 🪽
 
-Parse a metadata string and extract individual generation parameters.
+Parse metadata string and extract individual parameters.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| metadata | STRING | Raw metadata string (from Load Image + Metadata or pasted manually). |
-| show_prompt | BOOLEAN | Include prompt in formatted output. Default: true |
-| max_prompt_length | INT | Truncate prompt to this length in formatted output. Default: 100 |
+| metadata | STRING | Raw metadata string. |
+| show_prompt | BOOLEAN | Include prompt in output. |
+| max_prompt_length | INT | Truncate prompt length. |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| formatted | STRING | Human-readable summary of all parameters. |
+| formatted | STRING | Human-readable summary. |
 | model | STRING | Checkpoint/model name. |
-| sampler | STRING | Sampler name (e.g., "euler", "dpmpp_2m"). |
-| seed | INT | Generation seed. Returns 0 if not found. |
-| steps | INT | Number of sampling steps. Returns 0 if not found. |
-| cfg | FLOAT | CFG scale value. Returns 0.0 if not found. |
-| positive_prompt | STRING | Positive prompt text. |
-| negative_prompt | STRING | Negative prompt text. |
+| sampler | STRING | Sampler name. |
+| seed | INT | Generation seed. |
+| steps | INT | Sampling steps. |
+| cfg | FLOAT | CFG scale. |
+| positive_prompt | STRING | Positive prompt. |
+| negative_prompt | STRING | Negative prompt. |
 
 ---
 
@@ -550,42 +283,22 @@ Parse a metadata string and extract individual generation parameters.
 
 Add generation parameters as a visual overlay on an image.
 
-**How it works:**
-1. Reads metadata from provided source (image path or text)
-2. Formats parameters into readable text
-3. Renders text overlay on the image
+![Parameter Overlay](assets/parameteroverlay.png)
 
 | Input | Type | Description |
 |-------|------|-------------|
 | image | IMAGE | Image to add overlay to. |
-| image_path | STRING | Optional. Path to image file to read metadata from. |
-| metadata_text | STRING | Optional. Raw metadata text to display. |
-| position | ENUM | Where to place overlay: `bottom_extend` (adds bar below), `bottom_inside` (overlays bottom), `top_inside` (overlays top) |
-| font_size | INT | Text size in pixels. Range: 8-100. Default: 25 |
-| bg_opacity | FLOAT | Background transparency. 0.0 = transparent, 1.0 = solid. Default: 0.7 |
-| show_prompt | BOOLEAN | Include prompt text in overlay. Default: false |
-| max_prompt_length | INT | Truncate prompt to this length. 0 = no limit. Default: 200 |
+| image_path | STRING | Optional. Path to read metadata from. |
+| metadata_text | STRING | Optional. Raw metadata text. |
+| position | ENUM | `bottom_extend`, `bottom_inside`, `top_inside` |
+| font_size | INT | Text size 8-100. Default: 25 |
+| bg_opacity | FLOAT | Background opacity 0.0-1.0. Default: 0.7 |
+| show_prompt | BOOLEAN | Include prompt text. Default: false |
+| max_prompt_length | INT | Truncate prompt length. Default: 200 |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| image | IMAGE | Image with parameter overlay added. |
-
-**Position options:**
-- `bottom_extend`: Adds a bar below the image (increases image height)
-- `bottom_inside`: Overlays text on bottom of image (no size change)
-- `top_inside`: Overlays text on top of image (no size change)
-
-**Example output:**
-```
-┌─────────────────────────────────────────────┐
-│                                             │
-│              [Your Image]                   │
-│                                             │
-├─────────────────────────────────────────────┤
-│ SDXL Base | Sampler: euler | Steps: 30      │
-│ Seed: 12345 | CFG: 7.0                       │
-└─────────────────────────────────────────────┘
-```
+| image | IMAGE | Image with parameter overlay. |
 
 ---
 
@@ -596,89 +309,16 @@ Add custom text overlay with full styling control.
 | Input | Type | Description |
 |-------|------|-------------|
 | image | IMAGE | Image to add overlay to. |
-| text | STRING | Text to display. Supports multiple lines with `\n`. |
+| text | STRING | Text to display (supports `\n`). |
 | position | ENUM | `bottom_extend`, `bottom_inside`, `top_inside` |
-| font_size | INT | Text size 8-100. Default: 25 |
-| bg_opacity | FLOAT | Background opacity 0.0-1.0. Default: 0.7 |
-| text_color | STRING | Text color in hex format. Default: `#FFFFFF` (white) |
-| bg_color | STRING | Background color in hex format. Default: `#000000` (black) |
+| font_size | INT | Text size 8-100. |
+| bg_opacity | FLOAT | Background opacity. |
+| text_color | STRING | Text color hex. Default: `#FFFFFF` |
+| bg_color | STRING | Background color hex. Default: `#000000` |
 
 | Output | Type | Description |
 |--------|------|-------------|
 | image | IMAGE | Image with text overlay. |
-
-**Features:**
-- Auto word-wrap for long text
-- Supports Thai, Japanese, Chinese and other Unicode characters
-- Uses system fonts with fallback
-
----
-
-### Utility Nodes
-
-#### Image Bridge 🪽
-
-Pass-through node that can preview or save images without breaking the workflow chain.
-
-**How it works:**
-1. Receives an image
-2. Optionally shows preview in UI or saves to disk
-3. Passes the same image to output (unchanged)
-
-| Input | Type | Description |
-|-------|------|-------------|
-| image | IMAGE | Image to preview/save. Can be single image or batch. |
-| mode | ENUM | `preview` = show in ComfyUI, `save` = save to output folder |
-| filename_prefix | STRING | Prefix for saved files. Default: "ComfyAngel" |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| image | IMAGE | Same image passed through (no modifications). |
-
-**Essential for loops:** Place Image Bridge inside your loop to see each iteration's result:
-```
-[Loop Start] → [KSampler] → [Image Bridge] → [Loop End]
-                                  ↓
-                         (shows preview each iteration)
-```
-
----
-
-#### Workflow Metadata 🪽
-
-Output the current workflow structure as JSON strings.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| (none) | - | Uses ComfyUI's hidden prompt/workflow inputs. |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| prompt_json | STRING | Current prompt (nodes and their inputs) as JSON. |
-| workflow_json | STRING | Full workflow (including UI positions) as JSON. |
-
-**Use cases:**
-- Debug complex workflows
-- Embed workflow info in images
-- Log workflow configurations
-- Analyze node connections programmatically
-
----
-
-#### Image Info 🪽
-
-Get dimensions and batch information from an image tensor.
-
-| Input | Type | Description |
-|-------|------|-------------|
-| image | IMAGE | Image tensor to analyze. |
-
-| Output | Type | Description |
-|--------|------|-------------|
-| width | INT | Image width in pixels. |
-| height | INT | Image height in pixels. |
-| channels | INT | Number of color channels (typically 3 for RGB). |
-| batch_size | INT | Number of images in the batch (first dimension of tensor). |
 
 ---
 
@@ -686,68 +326,113 @@ Get dimensions and batch information from an image tensor.
 
 #### Smart Composite 🪽
 
-Composite (layer) an overlay image onto a canvas with visual drag-and-drop positioning.
+Composite (layer) an overlay image onto a canvas with visual position picker.
+
+![Smart Composite](assets/smart-composite1.png)
+![Smart Composite Dialog](assets/smart-composite2.png)
 
 | Input | Type | Description |
 |-------|------|-------------|
-| canvas | IMAGE | Background image (connect to Image Bridge first for preview). |
-| overlay | IMAGE | Image to place on top. Can have transparency. |
-| x | INT | Horizontal position. Range: -8192 to 8192 |
-| y | INT | Vertical position. Range: -8192 to 8192 |
-| anchor | ENUM | Which point of overlay aligns to X,Y: `top_left`, `top_center`, `top_right`, `center_left`, `center`, `center_right`, `bottom_left`, `bottom_center`, `bottom_right` |
-| scale | FLOAT | Resize overlay. 100 = original size, 50 = half, 200 = double. Range: 1-500% |
-| blend_mode | ENUM | How to blend: `normal`, `multiply`, `screen`, `overlay`, `soft_light`, `hard_light`, `difference`, `add`, `subtract` |
-| opacity | FLOAT | Overlay transparency. 0 = invisible, 100 = fully visible. |
+| canvas | IMAGE | Background image (connect via Image Bridge for preview). |
+| overlay | IMAGE | Image to place on top. |
+| quick_position | ENUM | Reference point: `free`, `top_left`, `top_center`, `top_right`, `middle_left`, `center`, `middle_right`, `bottom_left`, `bottom_center`, `bottom_right` |
+| x | INT | Horizontal **offset from quick_position**. |
+| y | INT | Vertical **offset from quick_position**. |
+| anchor | ENUM | Which point of overlay aligns to position. |
+| scale_percent | FLOAT | Resize overlay 1-500%. Default: 100 |
+| blend_mode | ENUM | `normal`, `multiply`, `screen`, `overlay`, `soft_light`, `hard_light`, `difference`, `add`, `subtract` |
+| opacity | FLOAT | Overlay transparency 0-100%. |
+| mask | MASK | Optional. External mask for overlay transparency. |
+| invert_mask | BOOLEAN | Invert the mask (ComfyUI LoadImage masks are inverted). Default: true |
 
 | Output | Type | Description |
 |--------|------|-------------|
 | image | IMAGE | Composited result. |
-| x | INT | Final X position (useful for saving position). |
+| x | INT | Final X position. |
 | y | INT | Final Y position. |
 
+**v0.6.0 Updates:**
+- **Quick Position as reference point:** X,Y are now offsets from the quick position, not absolute coordinates
+- **Mask input:** Connect MASK output from LoadImage for overlay transparency
+- **Invert mask option:** ComfyUI's LoadImage MASK is inverted (0=opaque), enable invert_mask to correct this
+
 **Visual Editor Features:**
-- **Drag overlay** directly on preview image
-- **Quick position buttons** for common placements (corners, center, edges)
-- **Freestyle mode** for free dragging (auto-activates when dragging)
-- **Scale slider** with live preview
-- **Blend mode preview** in widget
+- Drag overlay directly on preview
+- Quick position buttons for corners/edges/center
+- Scale slider with live preview
 
-**Anchor examples:**
-- `anchor: top_left, x: 10, y: 10` → Overlay's top-left corner at (10, 10)
-- `anchor: center, x: 256, y: 256` → Overlay centered at (256, 256)
+---
 
-**Workflow tip:** Connect canvas through **Image Bridge** first to enable the visual preview:
-```
-[Load Image] → [Image Bridge] → canvas [Smart Composite]
-                                overlay ← [Load Logo]
-```
+### Utility Nodes
+
+#### Image Bridge 🪽
+
+Pass-through node that previews or saves images without breaking the chain.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| image | IMAGE | Image(s) to preview/save. Handles different sizes. |
+| mode | ENUM | `preview` or `save` |
+| filename_prefix | STRING | Prefix for saved files. |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| image | IMAGE | Same image passed through. |
+
+**Essential for loops:** Place inside loop to see each iteration's result.
+
+**v0.6.0:** Now handles batches with different-sized images correctly.
+
+---
+
+#### Workflow Metadata 🪽
+
+Output current workflow as JSON strings.
+
+| Output | Type | Description |
+|--------|------|-------------|
+| prompt_json | STRING | Current prompt as JSON. |
+| workflow_json | STRING | Full workflow as JSON. |
+
+---
+
+#### Image Info 🪽
+
+Get dimensions and batch info from an image.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| image | IMAGE | Image tensor. |
+
+| Output | Type | Description |
+|--------|------|-------------|
+| width | INT | Image width. |
+| height | INT | Image height. |
+| channels | INT | Number of channels. |
+| batch_size | INT | Number of images in batch. |
 
 ---
 
 ### Widget Nodes
 
+![Widget Nodes](assets/ColorPicker-ResolutionPicker-SolidColor.png)
+
 #### Resolution Picker 🪽
 
-Quickly select from common image resolutions organized by aspect ratio.
+Select from common image resolutions by aspect ratio.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| aspect_ratio | ENUM | Aspect ratio category: `1:1`, `4:3`, `3:4`, `16:9`, `9:16`, `21:9`, `3:2`, `2:3` |
-| resolution | ENUM | Specific resolution within the selected ratio. Options change based on aspect_ratio. |
+| aspect_ratio | ENUM | `1:1`, `4:3`, `3:4`, `16:9`, `9:16`, `21:9`, `3:2`, `2:3` |
+| resolution | ENUM | Specific resolution (options change based on ratio). |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| width | INT | Selected width in pixels. |
-| height | INT | Selected height in pixels. |
-| aspect_ratio | STRING | The aspect ratio string (e.g., "16:9"). |
+| width | INT | Selected width. |
+| height | INT | Selected height. |
+| aspect_ratio | STRING | The ratio string. |
 
-**Included presets by model:**
-- **SD 1.5:** 512x512, 512x768, 768x512, etc.
-- **SDXL:** 1024x1024, 896x1152, 1152x896, etc.
-- **SD3/Flux:** 1024x1024, 1536x1024, etc.
-- **DALL-E 3:** 1024x1024, 1792x1024, 1024x1792
-- **Midjourney:** Various AR options
-- **Standard:** 1920x1080 (FHD), 3840x2160 (4K), etc.
+**Presets:** SD 1.5, SDXL, SD3/Flux, DALL-E 3, Midjourney, Standard (FHD, 4K)
 
 ---
 
@@ -757,72 +442,57 @@ Generate a solid color image.
 
 | Input | Type | Description |
 |-------|------|-------------|
-| color | STRING | Color in hex format (e.g., `#FF0000` for red). Default: `#FFFFFF` |
-| width | INT | Image width. Default: 512 |
-| height | INT | Image height. Default: 512 |
-| batch_size | INT | Number of identical images to generate. Default: 1 |
+| color | STRING | Hex color (e.g., `#FF0000`). |
+| width | INT | Image width. |
+| height | INT | Image height. |
+| batch_size | INT | Number of images. |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| image | IMAGE | Solid color image tensor. |
-
-**Use cases:**
-- Create colored backgrounds
-- Generate masks
-- Test color combinations
-- Create placeholder images
+| image | IMAGE | Solid color image. |
 
 ---
 
 #### Color Picker 🪽
 
-Interactive color picker with eyedropper functionality.
+Interactive color picker with eyedropper.
+
+![Color Picker](assets/colorpicker2.png)
 
 | Input | Type | Description |
 |-------|------|-------------|
-| color_hex | STRING | Color in hex format. Click the widget to open color picker UI. |
-| image | IMAGE | Optional. Connect an image to enable eyedropper (pick color from image). |
+| color_hex | STRING | Color in hex format. |
+| image | IMAGE | Optional. Connect for eyedropper. |
 
 | Output | Type | Description |
 |--------|------|-------------|
-| color | STRING | Normalized hex color (always uppercase with #). |
+| color | STRING | Normalized hex color. |
 
-**Widget features:**
-- Visual color picker popup
-- HEX input (e.g., `#FF5500`)
-- RGB input (e.g., `rgb(255, 85, 0)`)
-- HSL input (e.g., `hsl(20, 100%, 50%)`)
-- Color presets palette
-- Eyedropper tool (when image connected)
+**Features:** Visual picker, HEX/RGB/HSL input, color presets, eyedropper tool
 
 ---
 
 #### Smart Crop 🪽
 
-Crop an image with visual crop area selector.
+Crop image with visual editor.
+
+![Smart Crop](assets/smartcrop1.png)
+![Smart Crop Dialog](assets/smartcrop2.png)
 
 | Input | Type | Description |
 |-------|------|-------------|
 | image | IMAGE | Image to crop. |
-| x | INT | Left edge of crop area (0 = left edge of image). |
-| y | INT | Top edge of crop area (0 = top edge of image). |
-| crop_width | INT | Width of crop area. Default: 512 |
-| crop_height | INT | Height of crop area. Default: 512 |
+| x | INT | Left edge of crop. |
+| y | INT | Top edge of crop. |
+| crop_width | INT | Width of crop. |
+| crop_height | INT | Height of crop. |
+| bg_color | STRING | Background color for out-of-bounds areas. |
 
 | Output | Type | Description |
 |--------|------|-------------|
 | image | IMAGE | Cropped image. |
 
-**Visual editor:** Click the node's button to open a visual editor where you can drag to select the crop area. The x, y, width, height values update automatically.
-
----
-
-## Supported Metadata Formats
-
-| Format | Source | Example |
-|--------|--------|---------|
-| A1111 | Automatic1111, Civitai, many others | `prompt\nNegative: neg\nSteps: 30, Sampler: Euler, CFG: 7, Seed: 12345, Model: sdxl` |
-| ComfyUI | ComfyUI native workflow embedding | JSON in PNG `prompt` chunk |
+**Visual editor:** Click button to open drag-to-select crop area.
 
 ---
 
@@ -830,8 +500,15 @@ Crop an image with visual crop area selector.
 
 ### Loop Performance
 - **Image Bridge is essential** - Without it, you won't see intermediate results
-- **Memory usage** - Each iteration accumulates results in memory. For very large batches, consider using Split Image Batch with Auto Queue instead
-- **Preview vs Save** - Use `preview` mode in Image Bridge during testing, `save` mode for production runs
+- **No downstream required** - Loop End now runs even without connected outputs (v0.6.0)
+- **Memory usage** - Each iteration accumulates in memory. For large batches, use Split Image Batch with Auto Queue
+
+### Smart Composite Workflow
+```
+[Load Image] → [Image Bridge] → canvas [Smart Composite]
+                                overlay ← [Load Logo]
+                                mask ← [Load Logo].mask (with invert_mask: true)
+```
 
 ### Metadata Workflow
 ```
@@ -839,15 +516,26 @@ Crop an image with visual crop area selector.
          ↓
 [Parameter Parser] → formatted, model, seed, etc.
          ↓
-[Parameter Overlay] ← original image + formatted text
+[Parameter Overlay] ← original image
          ↓
-[Save Image] (image now has visible parameters)
+[Save Image]
 ```
 
-### Resolution Consistency
-When using Load All Images from Folder with Loop, all images are resized to match the first image. For best results:
-- Ensure source images have similar aspect ratios
-- Or pre-process images to consistent sizes before loading
+---
+
+## Changelog
+
+### v0.6.0
+- **Loop End:** Now executes without downstream connections
+- **Smart Composite:** Quick position is now a reference point (X,Y are offsets)
+- **Smart Composite:** Added mask input with invert_mask option for transparency
+- **Image Bridge:** Handles different-sized images in batches
+- **Load Images Batch:** Preserves RGBA channels
+
+### v0.5.0
+- Added JSON Extract node with visual field browser
+- Image Bridge preview improvements
+- Various bug fixes
 
 ---
 

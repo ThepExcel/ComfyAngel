@@ -269,51 +269,70 @@ class _CompositeBase:
         opacity: float,
     ) -> Image.Image:
         """Blend overlay onto canvas at position with blend mode and opacity."""
-        # Ensure both images are RGBA
-        if canvas.mode != "RGBA":
-            canvas = canvas.convert("RGBA")
+        # Ensure canvas is RGB (our output format)
+        if canvas.mode != "RGB":
+            canvas = canvas.convert("RGB")
+
+        # Ensure overlay is RGBA for alpha handling
         if overlay.mode != "RGBA":
             overlay = overlay.convert("RGBA")
 
         # Create a copy of canvas to work with
         result = canvas.copy()
 
+        # Apply opacity to overlay's alpha channel
+        if opacity < 1.0:
+            r, g, b, a = overlay.split()
+            a = a.point(lambda px: int(px * opacity))
+            overlay = Image.merge("RGBA", (r, g, b, a))
+
         # Get overlay dimensions
         ow, oh = overlay.size
         cw, ch = canvas.size
 
-        # Calculate the visible region of overlay on canvas
-        # Source region (from overlay)
+        # Check bounds
+        if x >= cw or y >= ch or x + ow <= 0 or y + oh <= 0:
+            return result
+
+        # For "normal" blend mode, use simple alpha compositing
+        if blend_mode == "normal":
+            # Paste overlay onto canvas using overlay's alpha as mask
+            result.paste(overlay, (x, y), overlay)
+            return result
+
+        # For other blend modes, need more complex handling
+        # Calculate the visible region
         src_x1 = max(0, -x)
         src_y1 = max(0, -y)
         src_x2 = min(ow, cw - x)
         src_y2 = min(oh, ch - y)
 
-        # Destination region (on canvas)
         dst_x1 = max(0, x)
         dst_y1 = max(0, y)
-        dst_x2 = min(cw, x + ow)
-        dst_y2 = min(ch, y + oh)
 
-        # Check if there's any visible region
         if src_x2 <= src_x1 or src_y2 <= src_y1:
-            return result.convert("RGB")
+            return result
 
         # Crop visible regions
         overlay_region = overlay.crop((src_x1, src_y1, src_x2, src_y2))
-        canvas_region = canvas.crop((dst_x1, dst_y1, dst_x2, dst_y2))
+        region_w = src_x2 - src_x1
+        region_h = src_y2 - src_y1
+        canvas_region = canvas.crop((dst_x1, dst_y1, dst_x1 + region_w, dst_y1 + region_h))
+
+        # Convert canvas region to RGBA for blend mode processing
+        canvas_region_rgba = canvas_region.convert("RGBA")
 
         # Apply blend mode
-        blended = self._apply_blend_mode(canvas_region, overlay_region, blend_mode)
+        blended = self._apply_blend_mode(canvas_region_rgba, overlay_region, blend_mode)
 
-        # Apply opacity
-        if opacity < 1.0:
-            blended = Image.blend(canvas_region, blended, opacity)
+        # Extract RGB and use overlay's alpha as mask for final composite
+        blended_rgb = Image.merge("RGB", blended.split()[:3])
+        overlay_alpha = overlay_region.split()[3]
 
-        # Paste blended region back
-        result.paste(blended, (dst_x1, dst_y1))
+        # Paste with alpha mask
+        result.paste(blended_rgb, (dst_x1, dst_y1), overlay_alpha)
 
-        return result.convert("RGB")
+        return result
 
     def _apply_blend_mode(
         self,
@@ -408,7 +427,14 @@ class SmartCompositeXY(_CompositeBase):
 
     Place an overlay image on a canvas at specific coordinates
     with anchor point, scale, blend mode, and opacity controls.
+
+    Quick Position determines the reference point on the canvas.
+    X,Y are offsets from that reference point.
     """
+
+    QUICK_POSITIONS = ["free", "top_left", "top_center", "top_right",
+                       "middle_left", "center", "middle_right",
+                       "bottom_left", "bottom_center", "bottom_right"]
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -416,6 +442,7 @@ class SmartCompositeXY(_CompositeBase):
             "required": {
                 "canvas": ("IMAGE",),
                 "overlay": ("IMAGE",),
+                "quick_position": (cls.QUICK_POSITIONS, {"default": "free"}),
                 "x": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
                 "y": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
                 "anchor": (cls.ANCHORS, {"default": "top_left"}),
@@ -425,6 +452,7 @@ class SmartCompositeXY(_CompositeBase):
             },
             "optional": {
                 "mask": ("MASK",),
+                "invert_mask": ("BOOLEAN", {"default": True}),
             },
         }
 
@@ -437,6 +465,7 @@ class SmartCompositeXY(_CompositeBase):
         self,
         canvas,
         overlay,
+        quick_position: str,
         x: int,
         y: int,
         anchor: str,
@@ -444,6 +473,7 @@ class SmartCompositeXY(_CompositeBase):
         blend_mode: str,
         opacity: float,
         mask=None,
+        invert_mask: bool = True,
     ):
         canvas = ensure_bhwc(canvas)
         overlay = ensure_bhwc(overlay)
@@ -451,6 +481,12 @@ class SmartCompositeXY(_CompositeBase):
         result = clone_tensor(canvas)
         batch_size = canvas.shape[0]
         overlay_batch = overlay.shape[0]
+
+        # Get canvas dimensions for quick position calculation
+        canvas_h, canvas_w = canvas.shape[1], canvas.shape[2]
+
+        # Calculate actual position from quick_position + offset
+        actual_x, actual_y = self._calc_quick_position(x, y, quick_position, canvas_w, canvas_h)
 
         results = []
 
@@ -484,6 +520,11 @@ class SmartCompositeXY(_CompositeBase):
                     mask_np = (mask_tensor.cpu().numpy() * 255).astype(np.uint8)
                     mask_img = Image.fromarray(mask_np, mode="L")
 
+                    # Invert mask if needed (ComfyUI MASK from LoadImage is inverted)
+                    if invert_mask:
+                        from PIL import ImageOps
+                        mask_img = ImageOps.invert(mask_img)
+
                     # Resize mask to match original overlay size if needed
                     if mask_img.size != original_overlay.size:
                         mask_img = mask_img.resize(original_overlay.size, Image.LANCZOS)
@@ -496,16 +537,14 @@ class SmartCompositeXY(_CompositeBase):
                     if overlay_img.mode != "RGBA":
                         overlay_img = overlay_img.convert("RGBA")
 
-                    # Multiply existing alpha with mask
+                    # Use mask as alpha channel
+                    # After invert: 255=opaque (show overlay), 0=transparent (show canvas)
                     r, g, b, a = overlay_img.split()
-                    # Mask is 0-1 where 1=keep, 0=discard
-                    # PIL alpha is 0=transparent, 255=opaque
-                    # ComfyUI MASK is 0=masked, 1=unmasked
                     overlay_img = Image.merge("RGBA", (r, g, b, mask_img))
 
-                # Calculate position based on anchor
+                # Calculate position based on anchor (using actual position from quick_position + offset)
                 pos_x, pos_y = self._calc_anchor_position(
-                    x, y, anchor, overlay_img.width, overlay_img.height
+                    actual_x, actual_y, anchor, overlay_img.width, overlay_img.height
                 )
 
                 # Apply blend mode and composite
@@ -516,6 +555,38 @@ class SmartCompositeXY(_CompositeBase):
                 results.append(from_pil(composited))
 
         return (torch.cat(results, dim=0), x, y)
+
+    def _calc_quick_position(self, offset_x: int, offset_y: int, quick_pos: str, canvas_w: int, canvas_h: int):
+        """
+        Calculate actual position from quick position reference + offset.
+
+        Args:
+            offset_x, offset_y: User-specified offset from reference point
+            quick_pos: Reference point on canvas ("free", "center", "top_left", etc.)
+            canvas_w, canvas_h: Canvas dimensions
+
+        Returns:
+            (actual_x, actual_y) - Absolute position on canvas
+        """
+        if quick_pos == "free":
+            # Free mode: offset is absolute position from (0,0)
+            return offset_x, offset_y
+
+        # Reference point positions on canvas
+        ref_positions = {
+            "top_left": (0, 0),
+            "top_center": (canvas_w // 2, 0),
+            "top_right": (canvas_w, 0),
+            "middle_left": (0, canvas_h // 2),
+            "center": (canvas_w // 2, canvas_h // 2),
+            "middle_right": (canvas_w, canvas_h // 2),
+            "bottom_left": (0, canvas_h),
+            "bottom_center": (canvas_w // 2, canvas_h),
+            "bottom_right": (canvas_w, canvas_h),
+        }
+
+        ref_x, ref_y = ref_positions.get(quick_pos, (0, 0))
+        return ref_x + offset_x, ref_y + offset_y
 
     def _calc_anchor_position(self, x: int, y: int, anchor: str, w: int, h: int):
         """Calculate top-left position based on anchor point."""
@@ -583,6 +654,9 @@ class ImageBridge:
     - Preview: Show image and make it available for visual editors
     - Save: Save image to output folder
 
+    Options:
+    - save_metadata: Include workflow/prompt metadata in PNG (default: True)
+
     Image passes through unchanged to the output.
     When images have different sizes, preview shows them padded to same size,
     but output remains original (unmodified) images.
@@ -597,6 +671,7 @@ class ImageBridge:
             },
             "optional": {
                 "filename_prefix": ("STRING", {"default": "ComfyAngel"}),
+                "save_metadata": ("BOOLEAN", {"default": True}),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -611,14 +686,22 @@ class ImageBridge:
     CATEGORY = "ComfyAngel/Utility"
     OUTPUT_NODE = True
 
-    def bridge(self, image, mode: str = "preview", filename_prefix: str = "ComfyAngel", prompt=None, extra_pnginfo=None):
+    def bridge(self, image, mode: str = "preview", filename_prefix: str = "ComfyAngel", save_metadata: bool = True, prompt=None, extra_pnginfo=None):
         import os
         import time
         import random
         import folder_paths
 
         # Handle list of tensors (from loop nodes)
-        original_tensors = []  # Keep originals for output
+        # Split ALL tensors into individual batch items for consistent handling
+        original_tensors = []  # Keep originals for output (each with batch=1)
+
+        def add_tensor(t):
+            """Add tensor, splitting batch if needed."""
+            t = ensure_bhwc(t)
+            # Split batch into individual items
+            for i in range(t.shape[0]):
+                original_tensors.append(t[i:i+1])
 
         if isinstance(image, list):
             if len(image) == 0:
@@ -627,72 +710,38 @@ class ImageBridge:
             # Filter and collect tensors
             for img in image:
                 if isinstance(img, torch.Tensor):
-                    img = ensure_bhwc(img)
-                    original_tensors.append(img)
+                    add_tensor(img)
                 elif isinstance(img, list):
                     # Nested list - flatten it
                     for nested_img in img:
                         if isinstance(nested_img, torch.Tensor):
-                            original_tensors.append(ensure_bhwc(nested_img))
+                            add_tensor(nested_img)
 
             if not original_tensors:
                 raise ValueError(f"No valid image tensors found in list. Got types: {[type(x).__name__ for x in image]}")
         else:
-            image = ensure_bhwc(image)
-            # Split batch into individual tensors
-            for i in range(image.shape[0]):
-                original_tensors.append(image[i:i+1])
-
-        # Check if all tensors have same shape (except batch dim)
-        first_shape = original_tensors[0].shape[1:]  # (H, W, C)
-        all_same_shape = all(t.shape[1:] == first_shape for t in original_tensors)
-
-        # Create preview tensors (padded if needed)
-        if all_same_shape:
-            # Same size - just concatenate
-            preview_batch = torch.cat(original_tensors, dim=0)
-        else:
-            # Different sizes - pad all to max size for preview (black background)
-            max_h = max(t.shape[1] for t in original_tensors)
-            max_w = max(t.shape[2] for t in original_tensors)
-
-            padded_tensors = []
-            with torch.no_grad():
-                for t in original_tensors:
-                    _, h, w, c = t.shape
-                    if h == max_h and w == max_w:
-                        padded_tensors.append(t)
-                    else:
-                        # Create black background tensor
-                        padded = torch.zeros(1, max_h, max_w, c, dtype=t.dtype, device=t.device)
-                        # Center the image
-                        y_offset = (max_h - h) // 2
-                        x_offset = (max_w - w) // 2
-                        padded[:, y_offset:y_offset+h, x_offset:x_offset+w, :] = t
-                        padded_tensors.append(padded)
-
-            preview_batch = torch.cat(padded_tensors, dim=0)
+            add_tensor(image)
 
         # Generate unique ID for this execution
         unique_id = f"{int(time.time()*1000)}_{random.randint(1000,9999)}"
 
-        # Create metadata (same as official SaveImage)
-        metadata = PngInfo()
-        if prompt is not None:
-            metadata.add_text("prompt", json.dumps(prompt))
-        if extra_pnginfo is not None:
-            for key in extra_pnginfo:
-                metadata.add_text(key, json.dumps(extra_pnginfo[key]))
+        # Create metadata (same as official SaveImage) - only if save_metadata is True
+        metadata = None
+        if save_metadata:
+            metadata = PngInfo()
+            if prompt is not None:
+                metadata.add_text("prompt", json.dumps(prompt))
+            if extra_pnginfo is not None:
+                for key in extra_pnginfo:
+                    metadata.add_text(key, json.dumps(extra_pnginfo[key]))
 
         results = []
         with torch.no_grad():
-            # Use preview_batch for preview/save (may be padded)
-            for i in range(preview_batch.shape[0]):
-                pil_img = to_pil(preview_batch, i)
+            # Process each image separately (like official PreviewImage)
+            for i, t in enumerate(original_tensors):
+                pil_img = to_pil(t, 0)  # Each tensor has batch=1, so index 0
 
                 if mode == "save":
-                    # Save to output folder - use ORIGINAL images, not padded
-                    orig_pil = to_pil(original_tensors[i], 0)
                     output_dir = folder_paths.get_output_directory()
                     subfolder = ""
 
@@ -705,7 +754,7 @@ class ImageBridge:
                             break
                         counter += 1
 
-                    orig_pil.save(filepath, pnginfo=metadata, compress_level=4)
+                    pil_img.save(filepath, pnginfo=metadata, compress_level=4)
 
                     results.append({
                         "filename": filename,
@@ -713,7 +762,7 @@ class ImageBridge:
                         "type": "output",
                     })
                 else:
-                    # Preview - save padded version for display
+                    # Preview - save each image separately
                     temp_dir = folder_paths.get_temp_directory()
                     filename = f"imgbridge_{unique_id}_{i:03d}.png"
                     filepath = os.path.join(temp_dir, filename)
@@ -1183,13 +1232,24 @@ class TextPermutation:
     Generate all combinations from a template with inline options.
 
     Syntax: "white {dog,cat,pig} is {sitting,jumping} on the floor"
-    Output: List of all 6 combinations
+    Output: List of all 6 combinations + combined text
 
     Supports:
     - Multiple groups: {a,b,c} ... {x,y}
     - Escaped braces: \\{ and \\} for literal braces
     - Custom separator (default: comma)
+    - Combined output with selectable delimiter
     """
+
+    OUTPUT_DELIMITER_OPTIONS = ["newline", "comma", "comma_space", "pipe", "semicolon", "space"]
+    OUTPUT_DELIMITER_MAP = {
+        "newline": "\n",
+        "comma": ",",
+        "comma_space": ", ",
+        "pipe": " | ",
+        "semicolon": "; ",
+        "space": " ",
+    }
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -1202,17 +1262,18 @@ class TextPermutation:
             },
             "optional": {
                 "separator": ("STRING", {"default": ","}),
+                "output_delimiter": (cls.OUTPUT_DELIMITER_OPTIONS, {"default": "newline"}),
                 "trim_options": ("BOOLEAN", {"default": True}),
             },
         }
 
-    RETURN_TYPES = ("STRING", "INT")
-    RETURN_NAMES = ("texts", "count")
-    OUTPUT_IS_LIST = (True, False)
+    RETURN_TYPES = ("STRING", "STRING", "INT")
+    RETURN_NAMES = ("texts", "combined", "count")
+    OUTPUT_IS_LIST = (True, False, False)
     FUNCTION = "generate"
     CATEGORY = "ComfyAngel/Utility"
 
-    def generate(self, template: str, separator: str = ",", trim_options: bool = True):
+    def generate(self, template: str, separator: str = ",", output_delimiter: str = "newline", trim_options: bool = True):
         import re
         from itertools import product
 
@@ -1222,7 +1283,7 @@ class TextPermutation:
 
         if not matches:
             # No groups found, return template as-is
-            return ([template], 1)
+            return ([template], template, 1)
 
         # Extract options from each group
         groups = []
@@ -1250,7 +1311,11 @@ class TextPermutation:
                 result = result.replace(match.group(0), option, 1)
             results.append(result)
 
-        return (results, len(results))
+        # Create combined output
+        delim = self.OUTPUT_DELIMITER_MAP.get(output_delimiter, "\n")
+        combined = delim.join(results)
+
+        return (results, combined, len(results))
 
 
 class JSONExtract:

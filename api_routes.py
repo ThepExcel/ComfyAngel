@@ -293,9 +293,10 @@ def resolve_folder_path(folder_name: str, sample_files: list) -> dict:
     """
     Try to resolve full folder path from folder name and sample files.
 
-    Searches common locations and recent folders.
+    Searches common locations and all available drives.
     """
     import platform
+    import string
 
     if not folder_name:
         return {"path": None, "error": "No folder name provided"}
@@ -304,7 +305,14 @@ def resolve_folder_path(folder_name: str, sample_files: list) -> dict:
     search_paths = []
 
     if platform.system() == "Windows":
-        # Windows common paths
+        # Windows: Find all available drives
+        available_drives = []
+        for letter in string.ascii_uppercase:
+            drive = f"{letter}:\\"
+            if os.path.exists(drive):
+                available_drives.append(drive)
+
+        # Windows common paths (prioritized)
         user_home = os.path.expanduser("~")
         search_paths = [
             os.path.join(user_home, "Desktop"),
@@ -312,10 +320,9 @@ def resolve_folder_path(folder_name: str, sample_files: list) -> dict:
             os.path.join(user_home, "Downloads"),
             os.path.join(user_home, "Pictures"),
             user_home,
-            "C:\\",
-            "D:\\",
-            "E:\\",
         ]
+        # Add all available drives
+        search_paths.extend(available_drives)
     else:
         # Unix common paths
         user_home = os.path.expanduser("~")
@@ -348,7 +355,7 @@ def resolve_folder_path(folder_name: str, sample_files: list) -> dict:
                 return {"path": candidate}
 
     # Deep search in common paths (one level)
-    for base_path in search_paths[:5]:  # Only first few to avoid slow search
+    for base_path in search_paths[:10]:  # Search more paths including drives
         if not os.path.exists(base_path):
             continue
 

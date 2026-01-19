@@ -87,10 +87,14 @@ async function openNativeFolderPicker(onSelect) {
 
         // Fallback: ask user to enter path
         const fullPath = prompt(
-            `Selected folder: "${folderName}"\n\nCould not auto-detect full path.\nPlease enter the full path:`,
+            `Selected folder: "${folderName}"\n\n` +
+            `Could not auto-detect full path (browser security limitation).\n\n` +
+            `Please enter the full path:\n` +
+            `• Windows example: D:\\Photos\\${folderName}\n` +
+            `• Linux example: /home/user/${folderName}`,
             folderName
         );
-        if (fullPath) onSelect(fullPath);
+        if (fullPath && fullPath.trim() !== "") onSelect(fullPath.trim());
 
     } catch (e) {
         if (e.name === "AbortError") {
@@ -223,26 +227,6 @@ app.registerExtension({
             const includeSubdirsWidget = this.widgets.find(w => w.name === "include_subdirs");
 
             if (!folderWidget) return result;
-
-            // Add Browse Folder button (uses native OS folder picker)
-            const browseBtn = this.addWidget("button", "📁 Browse Folder", null, async () => {
-                const onFolderSelected = async (selectedPath) => {
-                    folderWidget.value = selectedPath;
-                    saveFolderToHistory(selectedPath);
-
-                    // Auto-validate after selection
-                    const includeSubdirs = includeSubdirsWidget?.value || false;
-                    const result = await validateFolder(selectedPath, includeSubdirs);
-                    if (validationWidget) {
-                        validationWidget.validationResult = result;
-                        app.graph.setDirtyCanvas(true);
-                    }
-                };
-
-                // Use webkitdirectory input - shows native OS folder picker
-                openNativeFolderPicker(onFolderSelected);
-            });
-            browseBtn.serialize = false;
 
             // Add validation button
             const validateBtn = this.addWidget("button", "✓ Validate Folder", null, async () => {

@@ -53,14 +53,25 @@ def to_pil(tensor: torch.Tensor, index: int = 0) -> Image.Image:
         index: Batch index to extract
 
     Returns:
-        PIL Image in RGB mode
+        PIL Image in RGB or RGBA mode (depending on channels)
     """
     tensor = ensure_bhwc(tensor)
     # Get single image from batch
     img = tensor[index]
     # Convert to numpy and scale to 0-255
     img_np = (img.cpu().numpy() * 255).astype(np.uint8)
-    return Image.fromarray(img_np, mode="RGB")
+
+    # Check number of channels
+    channels = img_np.shape[2] if img_np.ndim == 3 else 1
+    if channels == 4:
+        return Image.fromarray(img_np, mode="RGBA")
+    elif channels == 3:
+        return Image.fromarray(img_np, mode="RGB")
+    elif channels == 1:
+        return Image.fromarray(img_np[:, :, 0], mode="L")
+    else:
+        # Fallback: treat as RGB
+        return Image.fromarray(img_np[:, :, :3], mode="RGB")
 
 
 def from_pil(image: Image.Image) -> torch.Tensor:
