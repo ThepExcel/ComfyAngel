@@ -619,7 +619,7 @@ class ImageBridge:
             if len(image) == 0:
                 raise ValueError("Empty image list")
 
-            # Filter and concatenate only tensors
+            # Filter and collect tensors
             tensors = []
             for img in image:
                 if isinstance(img, torch.Tensor):
@@ -630,10 +630,21 @@ class ImageBridge:
                     for nested_img in img:
                         if isinstance(nested_img, torch.Tensor):
                             tensors.append(ensure_bhwc(nested_img))
-            if tensors:
+
+            if not tensors:
+                raise ValueError(f"No valid image tensors found in list. Got types: {[type(x).__name__ for x in image]}")
+
+            # Check if all tensors have same shape (except batch dim)
+            first_shape = tensors[0].shape[1:]  # (H, W, C)
+            all_same_shape = all(t.shape[1:] == first_shape for t in tensors)
+
+            if all_same_shape:
                 image = torch.cat(tensors, dim=0)
             else:
-                raise ValueError(f"No valid image tensors found in list. Got types: {[type(x).__name__ for x in image]}")
+                # Different sizes - keep as list, process first image only for preview
+                # (The actual images will be passed through as-is)
+                image = tensors[0]  # Use first for preview
+                # Note: This means only first image shows in preview when sizes differ
         else:
             image = ensure_bhwc(image)
 
