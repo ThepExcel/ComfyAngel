@@ -1253,6 +1253,158 @@ class TextPermutation:
         return (results, len(results))
 
 
+class JSONExtract:
+    """
+    Extract values from JSON using field paths.
+
+    Supports:
+    - Simple fields: "seed"
+    - Nested fields: "data.user.name"
+    - Array index: "items[0]" or "nodes[2].type"
+
+    Input multiple field paths separated by delimiter.
+    """
+
+    DELIMITER_OPTIONS = ["newline", "comma", "pipe", "semicolon"]
+    DELIMITER_MAP = {
+        "newline": "\n",
+        "comma": ",",
+        "pipe": "|",
+        "semicolon": ";",
+    }
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "json_string": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "Paste JSON here or connect from metadata"
+                }),
+                "fields": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "Field paths (one per line)\ne.g. seed\n3.inputs.steps"
+                }),
+            },
+            "optional": {
+                "delimiter": (cls.DELIMITER_OPTIONS, {"default": "newline"}),
+                "output_delimiter": (cls.DELIMITER_OPTIONS, {"default": "newline"}),
+                "default_value": ("STRING", {"default": ""}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "INT")
+    RETURN_NAMES = ("values", "values_joined", "count")
+    OUTPUT_IS_LIST = (True, False, False)
+    OUTPUT_NODE = True  # Enable UI feedback for caching JSON
+    FUNCTION = "extract"
+    CATEGORY = "ComfyAngel/Utility"
+
+    def _parse_field_path(self, path: str) -> list:
+        """
+        Parse field path into list of keys/indices.
+        "data.users[0].name" -> ["data", "users", 0, "name"]
+        """
+        import re
+        parts = []
+        # Split by dots, but handle array brackets
+        tokens = re.split(r'\.(?![^\[]*\])', path)
+
+        for token in tokens:
+            # Check for array index: "items[0]" or just "[0]"
+            match = re.match(r'^([^\[]*)\[(\d+)\](.*)$', token)
+            if match:
+                key, index, rest = match.groups()
+                if key:
+                    parts.append(key)
+                parts.append(int(index))
+                # Handle chained brackets like [0][1]
+                while rest:
+                    match = re.match(r'^\[(\d+)\](.*)$', rest)
+                    if match:
+                        index, rest = match.groups()
+                        parts.append(int(index))
+                    else:
+                        break
+            else:
+                if token:
+                    parts.append(token)
+
+        return parts
+
+    def _get_value(self, data, path: str, default: str = "") -> str:
+        """
+        Get value from nested data using path.
+        Returns string representation of value.
+        """
+        if not path.strip():
+            return default
+
+        parts = self._parse_field_path(path.strip())
+        current = data
+
+        try:
+            for part in parts:
+                if isinstance(part, int):
+                    current = current[part]
+                elif isinstance(current, dict):
+                    current = current[part]
+                else:
+                    return default
+        except (KeyError, IndexError, TypeError):
+            return default
+
+        # Convert to string
+        if current is None:
+            return default
+        elif isinstance(current, bool):
+            return "true" if current else "false"
+        elif isinstance(current, (dict, list)):
+            return json.dumps(current, ensure_ascii=False)
+        else:
+            return str(current)
+
+    def extract(
+        self,
+        json_string: str,
+        fields: str,
+        delimiter: str = "newline",
+        output_delimiter: str = "newline",
+        default_value: str = "",
+    ):
+        # Parse JSON
+        if not json_string.strip():
+            return {"ui": {"json_cache": [""]}, "result": ([], "", 0)}
+
+        try:
+            data = json.loads(json_string)
+        except json.JSONDecodeError as e:
+            # Return error message as single value
+            return {"ui": {"json_cache": [json_string]}, "result": ([f"JSON Error: {e}"], f"JSON Error: {e}", 1)}
+
+        # Parse field paths
+        delim = self.DELIMITER_MAP.get(delimiter, "\n")
+        field_list = [f.strip() for f in fields.split(delim) if f.strip()]
+
+        if not field_list:
+            return {"ui": {"json_cache": [json_string]}, "result": ([], "", 0)}
+
+        # Extract values
+        values = []
+        for field in field_list:
+            value = self._get_value(data, field, default_value)
+            values.append(value)
+
+        # Join for output
+        out_delim = self.DELIMITER_MAP.get(output_delimiter, "\n")
+        values_joined = out_delim.join(values)
+
+        # Return with UI data for JS caching
+        return {"ui": {"json_cache": [json_string]}, "result": (values, values_joined, len(values))}
+
+
 # Export for registration
 NODE_CLASS_MAPPINGS = {
     "ComfyAngel_SmartCrop": SmartCrop,
@@ -1265,6 +1417,7 @@ NODE_CLASS_MAPPINGS = {
     "ComfyAngel_WorkflowMetadata": WorkflowMetadata,
     "ComfyAngel_TextCombine": TextCombine,
     "ComfyAngel_TextPermutation": TextPermutation,
+    "ComfyAngel_JSONExtract": JSONExtract,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1278,4 +1431,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "ComfyAngel_WorkflowMetadata": "Workflow Metadata 🪽",
     "ComfyAngel_TextCombine": "Text Combine 🪽",
     "ComfyAngel_TextPermutation": "Text Permutation 🪽",
+    "ComfyAngel_JSONExtract": "JSON Extract 🪽",
 }

@@ -33,6 +33,7 @@ from .nodes.widget_nodes import (
     WorkflowMetadata,
     TextCombine,
     TextPermutation,
+    JSONExtract,
     NODE_CLASS_MAPPINGS as WIDGET_MAPPINGS,
     NODE_DISPLAY_NAME_MAPPINGS as WIDGET_DISPLAY_MAPPINGS,
 )
