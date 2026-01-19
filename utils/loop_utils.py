@@ -100,7 +100,7 @@ def accumulate_results(existing, new_item):
             return new_item.clone()
         return [new_item]
 
-    # Both are tensors - concatenate
+    # Both are tensors - try to concatenate
     if isinstance(existing, torch.Tensor) and isinstance(new_item, torch.Tensor):
         # Ensure same number of dimensions
         if existing.dim() != new_item.dim():
@@ -108,6 +108,15 @@ def accumulate_results(existing, new_item):
                 existing = existing.unsqueeze(0)
             elif existing.dim() == 4 and new_item.dim() == 3:
                 new_item = new_item.unsqueeze(0)
+
+        # Check if shapes are compatible (all dims except batch must match)
+        if existing.dim() >= 2 and new_item.dim() >= 2:
+            existing_shape = existing.shape[1:]  # H, W, C
+            new_shape = new_item.shape[1:]
+            if existing_shape != new_shape:
+                # Sizes don't match - return as list instead
+                return [existing, new_item]
+
         return torch.cat([existing, new_item], dim=0)
 
     # existing is list of tensors - try to concat all
