@@ -584,6 +584,8 @@ class ImageBridge:
     - Save: Save image to output folder
 
     Image passes through unchanged to the output.
+    When images have different sizes, preview shows them padded to same size,
+    but output remains original (unmodified) images.
     """
 
     @classmethod
@@ -604,6 +606,7 @@ class ImageBridge:
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("image",)
+    OUTPUT_IS_LIST = (True,)
     FUNCTION = "bridge"
     CATEGORY = "ComfyAngel/Utility"
     OUTPUT_NODE = True
@@ -615,38 +618,60 @@ class ImageBridge:
         import folder_paths
 
         # Handle list of tensors (from loop nodes)
+        original_tensors = []  # Keep originals for output
+
         if isinstance(image, list):
             if len(image) == 0:
                 raise ValueError("Empty image list")
 
             # Filter and collect tensors
-            tensors = []
             for img in image:
                 if isinstance(img, torch.Tensor):
                     img = ensure_bhwc(img)
-                    tensors.append(img)
+                    original_tensors.append(img)
                 elif isinstance(img, list):
                     # Nested list - flatten it
                     for nested_img in img:
                         if isinstance(nested_img, torch.Tensor):
-                            tensors.append(ensure_bhwc(nested_img))
+                            original_tensors.append(ensure_bhwc(nested_img))
 
-            if not tensors:
+            if not original_tensors:
                 raise ValueError(f"No valid image tensors found in list. Got types: {[type(x).__name__ for x in image]}")
-
-            # Check if all tensors have same shape (except batch dim)
-            first_shape = tensors[0].shape[1:]  # (H, W, C)
-            all_same_shape = all(t.shape[1:] == first_shape for t in tensors)
-
-            if all_same_shape:
-                image = torch.cat(tensors, dim=0)
-            else:
-                # Different sizes - keep as list, process first image only for preview
-                # (The actual images will be passed through as-is)
-                image = tensors[0]  # Use first for preview
-                # Note: This means only first image shows in preview when sizes differ
         else:
             image = ensure_bhwc(image)
+            # Split batch into individual tensors
+            for i in range(image.shape[0]):
+                original_tensors.append(image[i:i+1])
+
+        # Check if all tensors have same shape (except batch dim)
+        first_shape = original_tensors[0].shape[1:]  # (H, W, C)
+        all_same_shape = all(t.shape[1:] == first_shape for t in original_tensors)
+
+        # Create preview tensors (padded if needed)
+        if all_same_shape:
+            # Same size - just concatenate
+            preview_batch = torch.cat(original_tensors, dim=0)
+        else:
+            # Different sizes - pad all to max size for preview (black background)
+            max_h = max(t.shape[1] for t in original_tensors)
+            max_w = max(t.shape[2] for t in original_tensors)
+
+            padded_tensors = []
+            with torch.no_grad():
+                for t in original_tensors:
+                    _, h, w, c = t.shape
+                    if h == max_h and w == max_w:
+                        padded_tensors.append(t)
+                    else:
+                        # Create black background tensor
+                        padded = torch.zeros(1, max_h, max_w, c, dtype=t.dtype, device=t.device)
+                        # Center the image
+                        y_offset = (max_h - h) // 2
+                        x_offset = (max_w - w) // 2
+                        padded[:, y_offset:y_offset+h, x_offset:x_offset+w, :] = t
+                        padded_tensors.append(padded)
+
+            preview_batch = torch.cat(padded_tensors, dim=0)
 
         # Generate unique ID for this execution
         unique_id = f"{int(time.time()*1000)}_{random.randint(1000,9999)}"
@@ -661,11 +686,13 @@ class ImageBridge:
 
         results = []
         with torch.no_grad():
-            for i in range(image.shape[0]):
-                pil_img = to_pil(image, i)
+            # Use preview_batch for preview/save (may be padded)
+            for i in range(preview_batch.shape[0]):
+                pil_img = to_pil(preview_batch, i)
 
                 if mode == "save":
-                    # Save to output folder
+                    # Save to output folder - use ORIGINAL images, not padded
+                    orig_pil = to_pil(original_tensors[i], 0)
                     output_dir = folder_paths.get_output_directory()
                     subfolder = ""
 
@@ -678,7 +705,7 @@ class ImageBridge:
                             break
                         counter += 1
 
-                    pil_img.save(filepath, pnginfo=metadata, compress_level=4)
+                    orig_pil.save(filepath, pnginfo=metadata, compress_level=4)
 
                     results.append({
                         "filename": filename,
@@ -686,7 +713,7 @@ class ImageBridge:
                         "type": "output",
                     })
                 else:
-                    # Preview - save to temp folder with unique name
+                    # Preview - save padded version for display
                     temp_dir = folder_paths.get_temp_directory()
                     filename = f"imgbridge_{unique_id}_{i:03d}.png"
                     filepath = os.path.join(temp_dir, filename)
@@ -698,7 +725,8 @@ class ImageBridge:
                         "type": "temp",
                     })
 
-        return {"ui": {"images": results}, "result": (image,)}
+        # Return original tensors as list (OUTPUT_IS_LIST handles this)
+        return {"ui": {"images": results}, "result": (original_tensors,)}
 
 
 class ResolutionPicker:
