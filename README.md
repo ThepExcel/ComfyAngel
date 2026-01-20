@@ -144,6 +144,8 @@ End a loop and collect all results into a single output.
 
 Load images from a folder with folder browser, validation, and history.
 
+![Load Images Batch from Folder](assets/LoadImagesBatchFromFolder.png)
+
 | Input | Type | Description |
 |-------|------|-------------|
 | folder_path | STRING | Path to folder. Use **Validate Folder** button to check. |
@@ -557,6 +559,7 @@ Download and drag into ComfyUI to try:
 | Workflow | Description |
 |----------|-------------|
 | [Text Permutation](examples/Text%20Permutation.json) | Generate prompt combinations and batch process |
+| [Load Images Batch from Folder](examples/LoadImagesBatchFromFolder.json) | Load all images from a folder |
 | [LoadImageBatch + Loop](examples/LoadImageBatch-Loop.json) | Load folder of images and process each with Loop nodes |
 | [Smart Crop](examples/SmartCrop.json) | Visual crop editor demo |
 | [Color & Resolution Picker](examples/Color-Resolution-Picker.json) | Widget nodes for color and resolution selection |
