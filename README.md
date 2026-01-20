@@ -12,6 +12,9 @@ Custom nodes for ComfyUI that make batch workflows easy and visual editing intui
 ### Text Permutation — Easy to create text combo list to batch change prompt
 ![Text Permutation](assets/TextPermutation.png)
 
+### Load Images Batch from Folder — Load all images with validation and history
+![Load Images Batch from Folder](assets/LoadImagesBatchFromFolder.png)
+
 ### Load Image + Metadata | Parameter Overlay | Image Bridge — Easy to place watermark
 ![Metadata](assets/metadata.png)
 ![Parameter Overlay](assets/parameteroverlay.png)
