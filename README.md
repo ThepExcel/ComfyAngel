@@ -1,8 +1,11 @@
 # ComfyAngel
 
-Parameter Overlay, Visual Widgets & Loop nodes for ComfyUI
+Custom nodes for ComfyUI that make batch workflows easy and visual editing intuitive.
 
-**Display generation parameters directly on your images** - perfect for sharing, comparing, and archiving your AI art.
+- **Text Permutation** — Generate prompt combinations from `{cat,dog} on {chair,sofa}` syntax
+- **Loop Nodes** — True loop without Auto Queue, process each item and collect results
+- **Parameter Overlay** — Display generation metadata on images for sharing and comparison
+- **Visual Widgets** — Position picker, crop editor, color picker with interactive UI
 
 ## Screenshots
 
