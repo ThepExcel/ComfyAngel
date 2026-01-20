@@ -273,6 +273,40 @@ cmd.exe /c "mklink /J ComfyAngel D:\\ComfyAngel"
 python main.py --listen
 ```
 
+### Publishing to Registry
+
+**สำคัญ:** ComfyUI Registry ใช้ **git tags** เพื่อระบุ version ที่ download ได้
+
+**ขั้นตอนการ publish version ใหม่:**
+
+```bash
+# 1. แก้ version ใน pyproject.toml
+version = "0.7.0"
+
+# 2. Commit การเปลี่ยนแปลง
+git add pyproject.toml
+git commit -m "chore: bump version to 0.7.0"
+
+# 3. สร้าง git tag (ต้องตรงกับ version ใน pyproject.toml)
+git tag 0.7.0
+
+# 4. Push ทั้ง commit และ tag
+git push origin main --tags
+```
+
+**GitHub Actions จะ auto-publish** เมื่อ push ไป main ที่แก้ `pyproject.toml`
+
+**ถ้าต้อง manual trigger:**
+1. ไป GitHub → Actions → "Publish to Comfy Registry"
+2. กด "Run workflow"
+
+**Gotchas:**
+| Issue | Solution |
+|-------|----------|
+| Manager install version เก่า | ตรวจสอบว่ามี git tag สำหรับ version นั้นหรือยัง |
+| "Version already exists" error | Version นี้ publish ไปแล้ว ต้อง bump version ใหม่ |
+| Exit code 2 | `REGISTRY_ACCESS_TOKEN` secret ไม่ถูกต้อง |
+
 ### Common Patterns
 
 **Image Batch Processing:**
