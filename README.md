@@ -7,7 +7,9 @@ Custom nodes for ComfyUI that make batch workflows easy and visual editing intui
 - **Parameter Overlay** — Display generation metadata on images for sharing and comparison
 - **Visual Widgets** — Position picker, crop editor, color picker with interactive UI
 
-🎬 **Video Tutorial:** [Watch on YouTube](https://youtu.be/3I0BhNTX4EY)
+🎬 **Video Tutorial:**
+
+[![Watch on YouTube](https://img.youtube.com/vi/3I0BhNTX4EY/maxresdefault.jpg)](https://youtu.be/3I0BhNTX4EY)
 
 ## Screenshots
 
