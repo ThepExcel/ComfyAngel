@@ -297,31 +297,44 @@ def process(self, required_input, optional_input=None):
 
 ---
 
-## Custom Skills
+## Skills & Agents
 
-**Location:** `.claude/skills/` (symlinked from `D:\claude-private\skills\`)
+### Primary Skill: `/comfyui-node-designer`
 
-### ComfyUI Node Designer (`/comfyui-node-designer`)
-ออกแบบ node concept ด้วย Design Thinking และ UX/UI focus
-- วิเคราะห์ pain points
-- หาช่องว่างในตลาด
-- ออกแบบ node spec
-- ตรวจสอบ project nodes ที่มีอยู่
-- ส่งต่อให้ builder
+**ใช้ skill นี้สำหรับงาน ComfyUI node ทุกอย่าง** — ทั้งออกแบบและ implement
 
-### ComfyUI Node Builder (`/comfyui-node-builder`)
-เขียน code ตาม spec จาก designer
-- Python backend (V1/V3 API)
-- JavaScript widgets
-- Tensor handling
-- Memory management
-- Registry publishing
-
-**Usage:**
 ```
-/comfyui-node-designer   # ออกแบบ node ใหม่
-/comfyui-node-builder    # เขียน code ตาม design
+/comfyui-node-designer
 ```
+
+**Workflow:**
+1. **Design** — วิเคราะห์ pain points, research existing solutions, ออกแบบ spec
+2. **Implement** — ทำเองได้เลย (ใช้ domain skills) หรือ spawn builder agent สำหรับงาน parallel
+
+**Domain Skills (auto-loaded):**
+| Task | Skill |
+|------|-------|
+| Node API, data types, patterns | `comfyui-node-spec` |
+| Tensor shapes, memory | `pytorch-tensors` |
+| PIL, resize, blend | `image-processing` |
+| Font, text layout | `text-rendering` |
+| Latent, video, execution | `advanced-comfyui` |
+
+### Builder Agent (for parallel work)
+
+**Location:** `.claude/agents/comfyui-node-builder.md`
+
+ใช้เมื่อต้องการ spawn subagent สำหรับงาน implementation หลายชิ้นพร้อมกัน:
+
+```python
+Task(
+    subagent_type="comfyui-node-builder",
+    description="Build [node name]",
+    prompt="## Task\n[spec from designer]"
+)
+```
+
+Builder agent จะ auto-load domain skills เดียวกัน
 
 ---
 
