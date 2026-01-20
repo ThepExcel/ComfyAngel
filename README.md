@@ -6,29 +6,53 @@ Parameter Overlay, Visual Widgets & Loop nodes for ComfyUI
 
 ## Screenshots
 
-### Loop Workflow
+### Text Permutation — Easy to create text combo list to batch change prompt
+![Text Permutation](assets/TextPermutation.png)
+
+### Load Image + Metadata | Parameter Overlay | Image Bridge — Easy to place watermark
+![Metadata](assets/metadata.png)
+![Parameter Overlay](assets/parameteroverlay.png)
+
+### Loop Start | Loop End — Easy batch processing each item from items list (supports text and image)
 ![Loop Workflow](assets/Loop.png)
 
-### Smart Composite - Visual Position Picker
+### Smart Composite — Visual Position Picker
 ![Smart Composite](assets/smart-composite1.png)
 ![Smart Composite Dialog](assets/smart-composite2.png)
 
-### Parameter Overlay
-![Parameter Overlay](assets/parameteroverlay.png)
-
-### Text Permutation
-![Text Permutation](assets/TextPermutation.png)
-
-### Smart Crop - Visual Editor
+### Smart Crop — Visual Crop Editor
 ![Smart Crop](assets/smartcrop1.png)
 ![Smart Crop Dialog](assets/smartcrop2.png)
 
-### Widget Nodes - Color Picker, Resolution Picker, Solid Color
+### Widget Nodes — Color Picker, Resolution Picker, Solid Color
 ![Widget Nodes](assets/ColorPicker-ResolutionPicker-SolidColor.png)
 ![Color Picker](assets/colorpicker2.png)
 
-### Load Image + Metadata
-![Metadata](assets/metadata.png)
+---
+
+## Node Index (A-Z)
+
+| Node | Description |
+|------|-------------|
+| [Color Picker](#color-picker-) | Interactive color picker with eyedropper |
+| [Custom Text Overlay](#custom-text-overlay-) | Add custom text overlay with full styling |
+| [Image Bridge](#image-bridge-) | Preview/save images without breaking the chain |
+| [Image Info](#image-info-) | Get dimensions and batch info |
+| [JSON Extract](#json-extract-) | Extract values from JSON using field paths |
+| [Load Image + Metadata](#load-image--metadata-) | Load image and extract generation metadata |
+| [Load Images Batch from Folder](#load-images-batch-from-folder-) | Load images from folder with validation |
+| [Loop End](#loop-end-) | End loop and collect results |
+| [Loop Start](#loop-start-) | Start loop over items |
+| [Parameter Overlay](#parameter-overlay-) | Add generation parameters as visual overlay |
+| [Parameter Parser](#parameter-parser-) | Parse metadata and extract parameters |
+| [Resolution Picker](#resolution-picker-) | Select from common resolutions by aspect ratio |
+| [Smart Composite](#smart-composite-) | Composite overlay with visual position picker |
+| [Smart Crop](#smart-crop-) | Crop image with visual editor |
+| [Solid Color](#solid-color-) | Generate solid color image |
+| [Split Image Batch](#split-image-batch-) | Extract single image from batch by index |
+| [Text Combine](#text-combine-) | Combine multiple text strings |
+| [Text Permutation](#text-permutation-) | Generate all combinations from template |
+| [Workflow Metadata](#workflow-metadata-) | Output current workflow as JSON |
 
 ---
 
