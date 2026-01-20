@@ -442,10 +442,10 @@ class SmartCompositeXY(_CompositeBase):
             "required": {
                 "canvas": ("IMAGE",),
                 "overlay": ("IMAGE",),
-                "quick_position": (cls.QUICK_POSITIONS, {"default": "free"}),
+                "quick_position": (cls.QUICK_POSITIONS, {"default": "bottom_right"}),
                 "x": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
                 "y": ("INT", {"default": 0, "min": -8192, "max": 8192, "step": 1}),
-                "anchor": (cls.ANCHORS, {"default": "top_left"}),
+                "anchor": (cls.ANCHORS, {"default": "bottom_right"}),
                 "scale_percent": ("FLOAT", {"default": 100.0, "min": 1.0, "max": 500.0, "step": 1.0}),
                 "blend_mode": (cls.BLEND_MODES, {"default": "normal"}),
                 "opacity": ("FLOAT", {"default": 100.0, "min": 0.0, "max": 100.0, "step": 1.0}),
