@@ -1,0 +1,162 @@
+{
+  "id": "f054b80c-5887-404b-9d12-cb5fdb3e8f5e",
+  "revision": 0,
+  "last_node_id": 44,
+  "last_link_id": 49,
+  "nodes": [
+    {
+      "id": 40,
+      "type": "LoadImage",
+      "pos": [
+        1168.292449391273,
+        556.9889050667347
+      ],
+      "size": [
+        282.798828125,
+        314
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            46
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.9.1",
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ComfyAngel_00001 (1).png",
+        "image"
+      ]
+    },
+    {
+      "id": 44,
+      "type": "ComfyAngel_ImageBridge",
+      "pos": [
+        1904.5924493912735,
+        547.3555585091178
+      ],
+      "size": [
+        270,
+        318
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 49
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "shape": 6,
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyangel",
+        "ver": "24843b056ca424909d1a624d67e0e5b025e9e540",
+        "Node name for S&R": "ComfyAngel_ImageBridge"
+      },
+      "widgets_values": [
+        "save",
+        "ComfyAngel",
+        true
+      ]
+    },
+    {
+      "id": 41,
+      "type": "ComfyAngel_SmartCrop",
+      "pos": [
+        1544.1591791276014,
+        552.5222058479854
+      ],
+      "size": [
+        270,
+        212
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 46
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": [
+            49
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyangel",
+        "ver": "24843b056ca424909d1a624d67e0e5b025e9e540",
+        "Node name for S&R": "ComfyAngel_SmartCrop"
+      },
+      "widgets_values": [
+        199,
+        -93,
+        682,
+        1212,
+        "#3E5A36"
+      ]
+    }
+  ],
+  "links": [
+    [
+      46,
+      40,
+      0,
+      41,
+      0,
+      "IMAGE"
+    ],
+    [
+      49,
+      41,
+      0,
+      44,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "workflowRendererVersion": "LG",
+    "ds": {
+      "scale": 1.1,
+      "offset": [
+        -980.5015403003645,
+        -272.59796240648996
+      ]
+    },
+    "frontendVersion": "1.36.14"
+  },
+  "version": 0.4
+}

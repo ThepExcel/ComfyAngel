@@ -550,6 +550,19 @@ Crop image with visual editor.
 
 ---
 
+## Example Workflows
+
+Download and drag into ComfyUI to try:
+
+| Workflow | Description |
+|----------|-------------|
+| [Text Permutation](examples/Text%20Permutation.json) | Generate prompt combinations and batch process |
+| [LoadImageBatch + Loop](examples/LoadImageBatch-Loop.json) | Load folder of images and process each with Loop nodes |
+| [Smart Crop](examples/SmartCrop.json) | Visual crop editor demo |
+| [Color & Resolution Picker](examples/Color-Resolution-Picker.json) | Widget nodes for color and resolution selection |
+
+---
+
 ## Changelog
 
 ### v0.6.0
