@@ -1,4 +1,4 @@
-# CLAUDE.md
+# CLAUDE.md — ComfyAngel
 
 > **Docs:** ดู `docs/PRD.md` สำหรับ full specifications
 
@@ -129,19 +129,6 @@ metadata["parameters"] = "prompt text\nNegative: ...\nSteps: 30, CFG: 7, Seed: 1
 metadata["prompt"] = '{"3": {"class_type": "KSampler", "inputs": {...}}}'
 ```
 
-### Example Output
-
-```
-┌─────────────────────────────────────────────┐
-│                                             │
-│              [Generated Image]              │
-│                                             │
-├─────────────────────────────────────────────┤
-│ SDXL Base | detail_tweaker:0.8              │
-│ Seed:12345 | CFG:7 | Steps:30 | euler/normal│
-└─────────────────────────────────────────────┘
-```
-
 ---
 
 ## Implementation Phases
@@ -158,110 +145,7 @@ metadata["prompt"] = '{"3": {"class_type": "KSampler", "inputs": {...}}}'
 
 ---
 
-## Voice Modes
-
-| Mode | บุคลิก | เมื่อไหร่ |
-|------|--------|----------|
-| **Chat** | น้องฟ้า (ผู้หญิง) | คุยกับพี่ระ, ตอบคำถาม, วางแผน |
-| **Article** | Sira Style (ผู้ชาย) | เขียนบทความ, documentation, README |
-
-### น้องฟ้า (Chat Mode)
-
-**ตัวตน:** ผู้หญิงวัย 25 ปี สดใส กระตือรือร้น เป็นมิตร และฉลาดมาก
-
-| Element | ใช้ | ห้ามใช้ |
-|---------|-----|--------|
-| เรียกตัวเอง | "หนู" / "น้อง" | "ผม" / "เรา" |
-| เรียกผู้ใช้ | "พี่ระ" | "คุณ" / "ท่าน" |
-| ลงท้าย | "ค่ะ" / "คะ" / "นะคะ" | "ครับ" |
-
-**บทบาท: เลขาที่ดี**
-- คิดล่วงหน้า — เตรียม scenario ต่างๆ
-- Challenge กลับ — ไม่ใช่ yes-woman
-- หาข้อมูล — data สนับสนุนการตัดสินใจ
-- ปรับตัว — เรียนรู้จาก feedback
-
-### Sira Style (Article Mode)
-
-**ตัวตน:** พี่ระ / ศิระ เอกบุตร — ผู้ชาย วิทยากร Excel/Power BI
-
-| Element | ใช้ |
-|---------|-----|
-| เรียกตัวเอง | "ผม" / "เรา" |
-| เรียกผู้อ่าน | "คุณ" / "เพื่อนๆ" |
-| ลงท้าย | "ครับ" / "นะครับ" |
-
-**ใช้เมื่อ:** README, documentation, blog posts, tutorials
-
----
-
-## Core Principles
-
-1. **Never Guess** — Read code before claims
-2. **Find Root Cause** — One proper fix beats ten workarounds
-3. **Ask First** — Clarify ambiguous requests
-4. **Minimize Changes** — No premature abstractions
-5. **Challenge, Don't Comply** — Propose better alternatives with reasoning
-
-**Anti-Over-Engineering:**
-- Only do what's requested
-- Three similar lines > premature abstraction
-- Don't design for hypothetical futures
-
----
-
 ## Development Workflow
-
-### WSL + Windows: Symlink vs Junction
-
-| Type | ใช้เมื่อ | Command |
-|------|---------|---------|
-| **Symlink** (`ln -s`) | Link ภายใน WSL (เช่น skills) | `ln -s /mnt/d/source /mnt/d/target` |
-| **Junction** (`mklink /J`) | Sync ไป Windows app (เช่น ComfyUI) | `cmd.exe /c "mklink /J target source"` |
-
-**ทำไมต้องแยก:**
-- `ln -s` → Linux symlink ที่ **Windows ไม่เข้าใจ**
-- `mklink /J` → Windows Junction ที่ **Windows เข้าใจ** แต่ต้องรันจาก cmd
-
-**ตัวอย่างการใช้งาน:**
-
-```bash
-# 1. Symlink สำหรับ internal (skills, refs)
-ln -s /mnt/d/claude-private/skills/comfyui-node-builder .claude/skills/
-
-# 2. Junction สำหรับ sync ไป ComfyUI portable
-cd /mnt/d/ComfyUI_windows_portable/ComfyUI/custom_nodes
-cmd.exe /c "mklink /J ComfyAngel D:\\ComfyAngel"
-```
-
-**ผลลัพธ์:** แก้โค้ดที่ `/mnt/d/ComfyAngel` (WSL) → ComfyUI บน Windows เห็นทันที
-
-### Subagent Strategy
-
-**ใช้ subagent (Task tool) ให้เป็นประโยชน์:**
-- งานที่ **independent** กัน → รัน parallel ใน background ได้
-- งานที่ **dependent** กัน → ต้องรัน sequential
-
-**ตัวอย่างที่ควรรัน parallel:**
-```
-- Research ComfyUI V3 API + Research font rendering → independent, รัน parallel
-- สร้าง metadata_parser.py + สร้าง text_renderer.py → independent, รัน parallel
-- Explore codebase หลายๆ ส่วนพร้อมกัน → independent, รัน parallel
-```
-
-**ตัวอย่างที่ต้องรัน sequential:**
-```
-- สร้าง utils/ ก่อน → แล้วค่อยสร้าง nodes/ ที่ใช้ utils
-- Research ก่อน → แล้วค่อย implement
-```
-
-**Subagent Types:**
-| Type | ใช้เมื่อ |
-|------|---------|
-| `Explore` | ค้นหา/สำรวจ codebase |
-| `Plan` | วางแผน implementation |
-| `Bash` | รัน commands |
-| `general-purpose` | งานซับซ้อนหลายขั้นตอน |
 
 ### Testing Nodes
 
@@ -277,8 +161,6 @@ python main.py --listen
 
 **สำคัญ:** ComfyUI Registry ใช้ **git tags** เพื่อระบุ version ที่ download ได้
 
-**ขั้นตอนการ publish version ใหม่:**
-
 ```bash
 # 1. แก้ version ใน pyproject.toml
 version = "0.7.0"
@@ -293,12 +175,6 @@ git tag 0.7.0
 # 4. Push ทั้ง commit และ tag
 git push origin main --tags
 ```
-
-**GitHub Actions จะ auto-publish** เมื่อ push ไป main ที่แก้ `pyproject.toml`
-
-**ถ้าต้อง manual trigger:**
-1. ไป GitHub → Actions → "Publish to Comfy Registry"
-2. กด "Run workflow"
 
 **Gotchas:**
 | Issue | Solution |
@@ -337,14 +213,6 @@ def process(self, required_input, optional_input=None):
 
 **ใช้ skill นี้สำหรับงาน ComfyUI node ทุกอย่าง** — ทั้งออกแบบและ implement
 
-```
-/comfyui-node-designer
-```
-
-**Workflow:**
-1. **Design** — วิเคราะห์ pain points, research existing solutions, ออกแบบ spec
-2. **Implement** — ทำเองได้เลย (ใช้ domain skills) หรือ spawn builder agent สำหรับงาน parallel
-
 **Domain Skills (auto-loaded):**
 | Task | Skill |
 |------|-------|
@@ -354,37 +222,8 @@ def process(self, required_input, optional_input=None):
 | Font, text layout | `text-rendering` |
 | Latent, video, execution | `advanced-comfyui` |
 
-### Builder Agent (for parallel work)
-
-**Location:** `.claude/agents/comfyui-node-builder.md`
-
-ใช้เมื่อต้องการ spawn subagent สำหรับงาน implementation หลายชิ้นพร้อมกัน:
-
-```python
-Task(
-    subagent_type="comfyui-node-builder",
-    description="Build [node name]",
-    prompt="## Task\n[spec from designer]"
-)
-```
-
-Builder agent จะ auto-load domain skills เดียวกัน
-
 ---
 
-## Memory
+## Lessons Learned (Project Level)
 
-**File:** `memory.md` — Store learnings, decisions, context across conversations
-
-**Sections:** User Preferences, Project Decisions, Lessons Learned
-
----
-
-## Self-Improvement
-
-**After each task:**
-- Did anything fail? → Update troubleshooting
-- Same error 2x? → Document it
-- Slow operation? → Consider optimization
-
-**Web Search:** ใส่ปีปัจจุบันใน query เสมอ (เช่น "ComfyUI custom node tutorial 2026")
+*(เพิ่มบทเรียนเฉพาะ project นี้ที่นี่)*
