@@ -11,6 +11,9 @@ keywords = ["comfyui", "custom-nodes", "overlay", "metadata", "parameters", "loo
 [project.urls]
 Repository = "https://github.com/ThepExcel/ComfyAngel"
 
+[tool.uv]
+package = false
+
 [tool.comfy]
 PublisherId = "thepexcel"
 DisplayName = "ComfyAngel"
