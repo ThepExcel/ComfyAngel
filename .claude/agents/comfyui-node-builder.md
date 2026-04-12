@@ -44,7 +44,7 @@ You are an expert ComfyUI custom node developer. Your job is to **implement** no
 
 ```
 Project: ComfyAngel
-Location: /mnt/d/ComfyAngel
+Location: D:/ComfyAngel
 
 Key files:
 ├── nodes/           # Python node implementations
