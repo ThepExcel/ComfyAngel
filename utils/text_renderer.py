@@ -3,6 +3,7 @@ Text Renderer for Parameter Overlay.
 
 Uses system fonts via PIL to render text on images.
 """
+# path-lint-skip: intentional Windows/macOS/Linux system font paths
 
 import os
 import sys
