@@ -670,7 +670,7 @@ class ImageBridge:
                 "mode": (["preview", "save"], {"default": "preview"}),
             },
             "optional": {
-                "filename_prefix": ("STRING", {"default": "ComfyAngel"}),
+                "filename_prefix": ("STRING", {"default": "ComfyAngel", "tooltip": "The prefix for the file to save. This may include formatting information such as %date:yyyy-MM-dd%."}),
                 "save_metadata": ("BOOLEAN", {"default": True}),
             },
             "hidden": {
@@ -735,6 +735,19 @@ class ImageBridge:
                 for key in extra_pnginfo:
                     metadata.add_text(key, json.dumps(extra_pnginfo[key]))
 
+        def compute_vars(template: str) -> str:
+            now = time.localtime()
+            template = template.replace("%year%", str(now.tm_year))
+            template = template.replace("%month%", str(now.tm_mon).zfill(2))
+            template = template.replace("%day%", str(now.tm_mday).zfill(2))
+            template = template.replace("%hour%", str(now.tm_hour).zfill(2))
+            template = template.replace("%minute%", str(now.tm_min).zfill(2))
+            template = template.replace("%second%", str(now.tm_sec).zfill(2))
+            return template
+
+        if "%" in filename_prefix:
+            filename_prefix = compute_vars(filename_prefix)
+
         results = []
         with torch.no_grad():
             # Process each image separately (like official PreviewImage)
@@ -743,13 +756,18 @@ class ImageBridge:
 
                 if mode == "save":
                     output_dir = folder_paths.get_output_directory()
-                    subfolder = ""
+                    subfolder = os.path.dirname(os.path.normpath(filename_prefix))
+                    filename = os.path.basename(os.path.normpath(filename_prefix))
+                    full_output_folder = os.path.join(output_dir, subfolder)
+                    if subfolder is not None and not os.path.exists(subfolder):
+                        os.makedirs(full_output_folder, exist_ok=True)
 
                     # Generate unique filename
+                    base_filename = filename
                     counter = 1
                     while True:
-                        filename = f"{filename_prefix}_{counter:05d}.png"
-                        filepath = os.path.join(output_dir, filename)
+                        filename = f"{base_filename}_{counter:05d}.png"
+                        filepath = os.path.join(full_output_folder, filename)
                         if not os.path.exists(filepath):
                             break
                         counter += 1
