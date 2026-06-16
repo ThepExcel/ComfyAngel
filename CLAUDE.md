@@ -1,3 +1,8 @@
+---
+purpose: |
+  Let me build the custom image-generation pieces my AI-art needs so I can create images off-the-shelf tools can't — sharpening a creative craft I'm proud of and can show others.
+---
+
 # CLAUDE.md — ComfyAngel
 
 > **Docs:** ดู `docs/PRD.md` สำหรับ full specifications
